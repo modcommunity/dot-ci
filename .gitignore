@@ -1,0 +1,7 @@
+# Nothing here is built, so this is short on purpose.
+*.pyc
+__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db

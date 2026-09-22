@@ -1,0 +1,139 @@
+# The family's two-step check, as one reusable workflow every repository calls.
+#
+# A caller's whole file is ten lines; see README.md. Everything that has to be known
+# about HOW these projects are checked -- that the addons have to be fetched before a
+# single script will parse, which runtime, which scenes are suites, which engine noise
+# is not an error -- is here, once, so that fixing it is one commit rather than sixty.
+#
+# WHY THIS REPOSITORY IS PUBLIC. A reusable workflow in a private repository can only
+# be called by repositories owned by the same account. The addons are the
+# organisation's and the games are their author's -- two owners, which is a rule here
+# and not an accident -- so a private dot-ci could be called by the addons and not by
+# the games, which is the half of the family that most needs a check before a release.
+# Nothing in this repository is secret: it is YAML and shell, and every credential it
+# uses arrives as a secret from the caller.
+name: Validate
+
+on:
+    workflow_call:
+        inputs:
+            suites:
+                description: >-
+                    Scenes to run, space separated, relative and without .tscn.
+                    Empty auto-detects examples/*selftest* and examples/headless_*.
+                type: string
+                default: ''
+            suite-timeout:
+                description: Seconds any one suite may take before it is a failure.
+                type: number
+                default: 300
+            godot:
+                description: >-
+                    False for a repository that is not a Godot project (the launcher,
+                    the bootstrapper). Those skip the runtime entirely and run
+                    shell-command instead.
+                type: boolean
+                default: true
+            shell-command:
+                description: A command to run instead of, or as well as, the Godot check.
+                type: string
+                default: ''
+        secrets:
+            DEPS_TOKEN:
+                description: >-
+                    Optional, and normally empty: the family's repositories are public
+                    and a public clone needs no credential. Set it if one goes private,
+                    at which point every caller already passes it and nothing else has
+                    to change.
+                required: false
+
+# One check per ref. A second push while the first is still running replaces it
+# rather than queueing behind it for a runner.
+concurrency:
+    group: validate-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+
+jobs:
+    validate:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - name: Check out the project
+              uses: actions/checkout@v4
+              with:
+                  path: project
+
+            # job_workflow_sha is the commit of THIS file, so the scripts are always
+            # the ones this workflow was written against. Pinning to a branch instead
+            # would let a change here reach every repository in the family at once
+            # with nothing having been run against it -- and @main on sixty callers is
+            # the same thing with extra steps.
+            - name: Check out the CI scripts this workflow belongs to
+              uses: actions/checkout@v4
+              with:
+                  repository: modcommunity/dot-ci
+                  ref: ${{ github.job_workflow_sha }}
+                  path: dot-ci
+
+            # Godot needs these even with --headless: the binary links them at load
+            # and fails with "libfontconfig.so.1: cannot open shared object file"
+            # before a line of GDScript runs, which reads as a broken download.
+            - name: Install the runtime's shared libraries
+              if: inputs.godot
+              run: |
+                  sudo apt-get update -qq
+                  sudo apt-get install -y -qq --no-install-recommends \
+                      libfontconfig1 libx11-6 libxcursor1 libxinerama1 libxrandr2 libxi6
+
+            - name: Read the pinned runtime version
+              if: inputs.godot
+              id: pin
+              run: echo "version=$(dot-ci/scripts/fetch-godot.sh --version)" >> "$GITHUB_OUTPUT"
+
+            - name: Restore the runtime
+              if: inputs.godot
+              uses: actions/cache@v4
+              with:
+                  path: ~/.godot-ci
+                  # The version names an immutable release asset, so a cache hit
+                  # cannot be a different binary -- and the digest is checked again
+                  # on every miss regardless.
+                  key: godot-${{ steps.pin.outputs.version }}
+
+            - name: Fetch and verify the runtime
+              if: inputs.godot
+              run: |
+                  GODOT="$(dot-ci/scripts/fetch-godot.sh --dest ~/.godot-ci/${{ steps.pin.outputs.version }})"
+                  echo "GODOT=$GODOT" >> "$GITHUB_ENV"
+                  "$GODOT" --version
+
+            # Not "if: secrets.DEPS_TOKEN" -- secrets are not available in a job-level
+            # if. The script decides: a project that declares no addons exits 0 having
+            # done nothing, and one that declares some and has no token fails loudly.
+            - name: Resolve the addons this project declares
+              if: inputs.godot
+              env:
+                  DEPS_TOKEN: ${{ secrets.DEPS_TOKEN }}
+              run: dot-ci/scripts/resolve-deps.sh project
+
+            - name: Import, parse, and run every suite
+              if: inputs.godot
+              env:
+                  SUITES: ${{ inputs.suites }}
+                  SUITE_TIMEOUT: ${{ inputs.suite-timeout }}
+              run: dot-ci/scripts/check.sh project
+
+            # Through the environment rather than interpolated into the run block.
+            # The value comes from the caller's own workflow file, so this is not a
+            # trust boundary -- but an input spliced into a shell script is one
+            # apostrophe away from being a syntax error nobody can read, and the
+            # habit is worth more than the exception.
+            - name: Run this repository's own tests
+              if: inputs.shell-command != ''
+              working-directory: project
+              env:
+                  SHELL_COMMAND: ${{ inputs.shell-command }}
+              run: bash -c "$SHELL_COMMAND"

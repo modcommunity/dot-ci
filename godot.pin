@@ -1,0 +1,26 @@
+# The Godot runtime CI uses, pinned, with the digest that makes the pin mean
+# something. One version, never "latest": a digest only says anything about a file
+# that cannot change, and `latest` changes under it.
+#
+# THIS IS THE SECOND COPY OF THIS PIN AND THE DRIFT IS GUARDED.
+#
+# The first is dot-server-deploy/tools/fetch-godot.sh, which is authoritative: it is
+# the pin the containers, the release tarballs and every developer box are built from,
+# and it carries the digests for three platforms because those have to run everywhere.
+# CI only ever needs Linux x86_64, and reaching into a private repository to read one
+# string before it can fetch anything would put that repository in front of every
+# check in the family.
+#
+# So it is copied, and dot-server-deploy's own workflow compares the two and fails
+# when they disagree -- the drift is caused THERE and would be suffered HERE, so the
+# check belongs on the side that can name the person who moved the pin. Moving it
+# means editing both, in the same change.
+#
+# To move it: take the digest from that release's own SHA512-SUMS.txt, with your own
+# eyes, and paste it. Never from beside the binary -- a checksum served by whoever
+# served the zip is checked by whoever would have had to tamper with both.
+#
+#   curl -fsSL https://github.com/godotengine/godot/releases/download/4.7.2-stable/SHA512-SUMS.txt
+
+GODOT_VERSION=4.7.2-stable
+SHA512_linux_x86_64=9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65

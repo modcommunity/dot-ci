@@ -1,0 +1,108 @@
+# Package a tagged commit and attach the artifact to its GitHub Release.
+#
+# It does NOT validate. Callers run validate.yml first and depend on it with `needs`,
+# because a reusable workflow cannot reliably call another one by a relative path and
+# cannot take an expression for a ref -- so nesting them here would mean pinning the
+# validate job to a branch and losing the guarantee that the scripts match the
+# workflow. Two jobs in the caller is four more lines and no ambiguity.
+#
+# THE RELEASE MAY ALREADY EXIST WHEN THIS RUNS, and that is the normal case rather
+# than an error: the tag is what the sync reacts to, so whatever created the release
+# from that tag may well have got there first. So this creates one only if there is
+# none, and uploads with --clobber either way. `gh release create` on an existing tag
+# fails outright, and a workflow that goes red because something else did its job
+# first is a workflow people stop reading.
+#
+# WHAT IT DELIBERATELY DOES NOT DO: publish anything to the content CDN, and sign
+# anything. A game ships as a source tarball here and is turned into a signed pack by
+# the one deployment that holds the private key. A mounted resource pack can contain
+# scripts and can never be unmounted on any platform, so the signature is the only
+# thing standing between a content origin and arbitrary code in every client -- and
+# sixty repositories each holding a copy of that key is sixty ways to lose it.
+name: Release
+
+on:
+    workflow_call:
+        inputs:
+            version:
+                description: >-
+                    The version to stamp and name artifacts with. Empty takes it from
+                    the tag, which is the usual case and the only one that cannot
+                    disagree with what was pushed.
+                type: string
+                default: ''
+            prerelease:
+                description: Mark a release this workflow creates as a prerelease.
+                type: boolean
+                default: false
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - name: Check out the tagged commit
+              uses: actions/checkout@v4
+              with:
+                  path: project
+                  # The artifact is defined by what git tracks, so the checkout has to
+                  # be a real one. A shallow clone is fine; git archive reads HEAD.
+                  fetch-depth: 1
+
+            - name: Check out the CI scripts this workflow belongs to
+              uses: actions/checkout@v4
+              with:
+                  repository: modcommunity/dot-ci
+                  ref: ${{ github.job_workflow_sha }}
+                  path: dot-ci
+
+            - name: Work out the version
+              id: v
+              env:
+                  GIVEN: ${{ inputs.version }}
+              run: |
+                  version="$GIVEN"
+                  if [ -z "$version" ]; then
+                      case "${{ github.ref }}" in
+                          refs/tags/*) version="${{ github.ref_name }}" ;;
+                          *) echo "no tag and no version input: nothing to name this" >&2; exit 1 ;;
+                      esac
+                  fi
+                  # A leading v is how the tags are written and is not part of the
+                  # version any consumer wants.
+                  echo "version=${version#v}" >> "$GITHUB_OUTPUT"
+                  echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+            - name: Build the artifact
+              run: |
+                  dot-ci/scripts/package.sh project "${{ steps.v.outputs.version }}" \
+                      --out "$RUNNER_TEMP/dist" \
+                      --name "${{ github.event.repository.name }}"
+
+            - name: Attach it to the release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ steps.v.outputs.tag }}
+                  PRERELEASE: ${{ inputs.prerelease }}
+              run: |
+                  set -euo pipefail
+                  if ! gh release view "$TAG" >/dev/null 2>&1; then
+                      args=(--title "$TAG" --generate-notes)
+                      [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
+                      gh release create "$TAG" "${args[@]}"
+                  else
+                      echo "release $TAG already exists; uploading into it"
+                  fi
+                  # --clobber so a re-run of a failed job replaces a half-uploaded
+                  # asset instead of failing on the name already being taken.
+                  gh release upload "$TAG" "$RUNNER_TEMP"/dist/* --clobber
+
+            - name: Keep a copy on the run
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ github.event.repository.name }}-${{ steps.v.outputs.version }}
+                  path: ${{ runner.temp }}/dist
+                  if-no-files-found: error

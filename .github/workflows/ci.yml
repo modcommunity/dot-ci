@@ -1,0 +1,65 @@
+# This repository's own check. There is no way to test a reusable workflow except by
+# calling it, so what is checkable here is the four scripts and the shape of the YAML
+# -- and that is worth having, because a mistake in this repository is not one red
+# repository, it is sixty.
+name: CI
+
+on:
+    push:
+        branches: ['**']
+        paths-ignore:
+            - '**/*.md'
+    pull_request:
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    scripts:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Every script parses
+              run: for f in scripts/*.sh; do bash -n "$f" || exit 1; done
+
+            - name: shellcheck
+              run: shellcheck -S warning scripts/*.sh
+
+            - name: Every workflow is loadable YAML with jobs in it
+              run: |
+                  python3 - <<'PY'
+                  import pathlib, sys, yaml
+                  bad = 0
+                  for f in sorted(pathlib.Path('.github/workflows').glob('*.yml')):
+                      try:
+                          d = yaml.safe_load(f.read_text())
+                          assert d.get('jobs'), 'no jobs'
+                          # `on:` is the YAML 1.1 boolean True once parsed, which is
+                          # correct and not a finding.
+                          assert True in d or 'on' in d, 'no trigger'
+                      except Exception as e:
+                          print('BAD', f, e); bad += 1
+                  sys.exit(bad > 0)
+                  PY
+
+            - name: The pin is readable and names a real release asset
+              run: |
+                  set -euo pipefail
+                  version="$(scripts/fetch-godot.sh --version)"
+                  echo "pinned at $version"
+                  curl -fsSLI -o /dev/null \
+                      "https://github.com/godotengine/godot/releases/download/${version}/Godot_v${version}_linux.x86_64.zip"
+
+            # The end-to-end proof that the pin, the digest and the unpack all still
+            # agree. It is the one step here that would catch a moved release asset,
+            # and it is cheap.
+            - name: Fetch and verify the runtime
+              run: |
+                  sudo apt-get update -qq
+                  sudo apt-get install -y -qq --no-install-recommends \
+                      libfontconfig1 libx11-6 libxcursor1 libxinerama1 libxrandr2 libxi6
+                  GODOT="$(scripts/fetch-godot.sh --dest "$RUNNER_TEMP/godot")"
+                  "$GODOT" --version
