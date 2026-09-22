@@ -82,13 +82,23 @@ jobs:
                       --out "$RUNNER_TEMP/dist" \
                       --name "${{ github.event.repository.name }}"
 
+            # GH_REPO is not belt and braces, it is the whole thing working. `gh`
+            # works out which repository it is talking to from the git remote of the
+            # directory it runs in -- and this workflow checks the caller out into
+            # `project/`, so the working directory here is the workspace root, which
+            # is not a git repository at all. Without this, every one of these steps
+            # fails with "could not determine repository" no matter what the token is
+            # allowed to do. Naming it explicitly is also simply more honest than
+            # depending on a checkout path two steps away.
             - name: Attach it to the release
               env:
                   GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
                   TAG: ${{ steps.v.outputs.tag }}
                   PRERELEASE: ${{ inputs.prerelease }}
               run: |
                   set -euo pipefail
+                  echo "attaching to ${GH_REPO} @ ${TAG}"
                   if ! gh release view "$TAG" >/dev/null 2>&1; then
                       args=(--title "$TAG" --generate-notes)
                       [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
