@@ -201,6 +201,32 @@ if [ "${#artifacts[@]}" -eq 0 ]; then
 
         [ "$missing" -eq 0 ] || { printf '%d imported outputs are missing; re-import and try again\n' "$missing" >&2; exit 1; }
 
+        # What the pack needs of the host's addons, as requires.json at its root. A pack's
+        # scripts compile against the addons of whatever mounts it, so one built against a
+        # newer dot-net than a player's client has fails to PARSE there, mid-load, with
+        # nothing a person can read; dot-cloud reads this file before mounting and says it
+        # in a sentence instead (see dot-core's DotAddonApi). Derived from the game's own
+        # files at the levels THIS checkout's addons have -- "built against" -- so nobody
+        # keeps the list. A game that commits its own keeps control of it, and it is
+        # audited here instead: an addon used and not declared, or declared above what
+        # this build has, fails the release rather than a player's join.
+        REQ_TOOL="res://addons/dot_core/tools/dot_requires.gd"
+        if [ -f "$PROJECT/addons/dot_core/tools/dot_requires.gd" ]; then
+            if [ -f "$PACK_DIR/requires.json" ]; then
+                "${GODOT:-godot}" --headless --path "$PROJECT" --script "$REQ_TOOL" -- --check requires.json >&2 \
+                    || { printf '%s/requires.json does not cover what the game uses\n' "$NAME" >&2; exit 1; }
+            else
+                "${GODOT:-godot}" --headless --path "$PROJECT" --script "$REQ_TOOL" -- --out "$PACK_DIR/requires.json" >&2 \
+                    || { printf 'could not derive requires.json for %s\n' "$NAME" >&2; exit 1; }
+                [ -s "$PACK_DIR/requires.json" ] \
+                    || { printf 'requires.json for %s came out empty\n' "$NAME" >&2; exit 1; }
+            fi
+        else
+            # A dot-core pinned from before the tool existed. Said, not failed: the pack is
+            # exactly what it was the day before, and a host checks nothing it is not given.
+            printf 'note: dot-core has no dot_requires.gd; %s ships without requires.json\n' "$NAME" >&2
+        fi
+
         pack_path="$OUT/${NAME}-${VERSION}-pack.zip"
         rm -f "$pack_path"
         # Entries at the top level, not under a wrapper directory: the publisher strips

@@ -44,6 +44,8 @@ The addon dependencies come from each project's own `.gitignore`, from its `/add
 
 **`git ls-files` rather than `find`, for both the parse list and the artifact.** An addon repository's own source lives in `addons/<its name>/` and its dependencies sit right beside it, so "skip addons/" parses none of the repository and "parse addons/" parses all of dot-core on every one of its fifty consumers — turning one broken dependency into a failure reported against the whole family. What separates them is ownership, not path, and the links being gitignored is what makes git the thing that knows.
 
+**A game's pack says which addon API it was built against, and nothing here keeps that list.** `package.sh --pack` runs dot-core's `tools/dot_requires.gd` against the imported checkout and writes `requires.json` into the pack: every addon whose global classes or `res://addons/<x>/` paths the game's files name, at the level that addon's `<addon>_api.gd` declares (1 when it has none). dot-cloud reads it before mounting. A committed `requires.json` wins and is audited with `--check` instead. It is derived from what the *runner* resolved, which is the pinned `.deps`, so "built against" means what was actually built against. A dot-core too old to have the tool gets a note, not a failure — the pack is then exactly what it was before the tool existed.
+
 ## Changing a workflow
 
 There is no way to test a reusable workflow except by calling it. Tag this repository (`v1` moves; `v1.2.3` does not), point one caller at the new tag, watch it, then move `v1`. Callers pin `@v1` on purpose — a floating `@main` across sixty repositories means a typo here is sixty red repositories at once.
