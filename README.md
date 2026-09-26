@@ -64,7 +64,7 @@ If you do create it: an organisation secret on the addons' side, and the same to
 | `godot` | `true` | `false` for a repository that is not a Godot project. Those skip the runtime entirely. |
 | `shell-command` | — | A command to run in the checkout, instead of or as well as the Godot check. |
 
-`release.yml` takes `version` (empty means "take it from the tag", which is the only value that cannot disagree with what was pushed) and `prerelease`.
+`release.yml` takes `version` (empty means "take it from the tag", which is the only value that cannot disagree with what was pushed) and `prerelease`. A game also passes `pack: true` (plus `pack-exclude-dirs` for anything beyond `addons examples tools screenshots .github`, and the `DEPS_TOKEN` secret), which imports the project and attaches `<name>-<version>-pack.zip` as well — see below. Needs `@v1.1.0` or later.
 
 ## What it checks
 
@@ -85,6 +85,8 @@ A repository with no detectable suite is **reported and passes**. The parse pass
 **An addon repository ships `addons/<name>/` and nothing else.** That folder is the distributable; `project.godot` and `examples/` exist so the addon can be opened and validated standalone, and shipping them would put a second `project.godot` into the tree of whoever unzipped it. The zip's entries begin at `addons/`, so it installs by being unpacked at a project root. `plugin.cfg`'s version is stamped from the tag **in the artifact only** — the tag is the number that is unique, pushed, and impossible to forget to bump, and a committed version that has to be edited in lockstep across fifty-six repositories is a number that goes wrong quietly and then ships.
 
 **Everything else ships the tracked tree as a tarball** — a game is not installed into a project, it is a source that the deployment turns into signed content.
+
+**A game with `pack: true` also ships `<name>-<version>-pack.zip`**, because the tarball cannot become a pack: its addons are gitignored links and it has no `.godot/imported`, and a mounted pack is never re-imported, so every model and texture in it would load as nothing. The pack zip is the tracked tree without `addons/`, `examples/`, `tools/`, `screenshots/` and anything in `pack-exclude-dirs`, plus exactly the imported outputs its `.import` markers name — moved to `_imported/` with the markers rewritten, because a web export cannot read the engine's reserved `.godot/` directory back out of a mount. It is unsigned. website-city's release sync publishes a release file ending in `-pack.zip` in place of everything else on that release and signs it there, under `<owner>/<repo>`.
 
 Both come with a `SHA256SUMS`, because a release page is not the only thing that consumes these and whatever carries them onward has to be able to say the bytes it got are the bytes that were built.
 

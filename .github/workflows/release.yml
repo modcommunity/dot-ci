@@ -14,8 +14,9 @@
 # first is a workflow people stop reading.
 #
 # WHAT IT DELIBERATELY DOES NOT DO: publish anything to the content CDN, and sign
-# anything. A game ships as a source tarball here and is turned into a signed pack by
-# the one deployment that holds the private key. A mounted resource pack can contain
+# anything. A game ships as a source tarball and, with `pack: true`, an unsigned pack
+# zip; the signed pack is made from that by the one deployment that holds the private
+# key. A mounted resource pack can contain
 # scripts and can never be unmounted on any platform, so the signature is the only
 # thing standing between a content origin and arbitrary code in every client -- and
 # sixty repositories each holding a copy of that key is sixty ways to lose it.
@@ -35,6 +36,25 @@ on:
                 description: Mark a release this workflow creates as a prerelease.
                 type: boolean
                 default: false
+            pack:
+                description: >-
+                    Also attach <name>-<version>-pack.zip, the imported tree website-city
+                    publishes as this game's signed pack. For a game; an addon's zip is
+                    already that. Imports the project first, so it needs DEPS_TOKEN when
+                    the project declares addons.
+                type: boolean
+                default: false
+            pack-exclude-dirs:
+                description: >-
+                    Directory names, space-separated, left out of the pack on top of
+                    addons, examples, tools, screenshots and .github. The same list the
+                    game's content/<id>/pack.json gives dot-server-deploy.
+                type: string
+                default: ''
+        secrets:
+            DEPS_TOKEN:
+                description: Reads the private addons the project declares. Only `pack` needs it.
+                required: false
 
 permissions:
     contents: write
@@ -76,11 +96,51 @@ jobs:
                   echo "version=${version#v}" >> "$GITHUB_OUTPUT"
                   echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
 
-            - name: Build the artifact
+            # The pack is made from an IMPORTED tree, because a mounted pack is never
+            # re-imported and a .glb without its imported form loads as nothing. The
+            # same four steps validate.yml runs, for the same reasons given there.
+            - name: Install the runtime's shared libraries
+              if: inputs.pack
               run: |
+                  sudo apt-get update -qq
+                  sudo apt-get install -y -qq --no-install-recommends \
+                      libfontconfig1 libx11-6 libxcursor1 libxinerama1 libxrandr2 libxi6
+
+            - name: Fetch and verify the runtime
+              if: inputs.pack
+              run: |
+                  version="$(dot-ci/scripts/fetch-godot.sh --version)"
+                  GODOT="$(dot-ci/scripts/fetch-godot.sh --dest ~/.godot-ci/$version)"
+                  echo "GODOT=$GODOT" >> "$GITHUB_ENV"
+                  "$GODOT" --version
+
+            - name: Resolve the addons this project declares
+              if: inputs.pack
+              env:
+                  DEPS_TOKEN: ${{ secrets.DEPS_TOKEN }}
+              run: dot-ci/scripts/resolve-deps.sh project
+
+            # One pass, exactly as check.sh runs it, and not gated on its exit code for
+            # the same reason check.sh does not: what decides whether the import worked
+            # is whether the outputs exist, and package.sh --pack refuses a pack in which
+            # any .import marker names an output that is not there.
+            - name: Import the project
+              if: inputs.pack
+              run: timeout 600 "$GODOT" --headless --path project --import || true
+
+            - name: Build the artifact
+              env:
+                  PACK: ${{ inputs.pack }}
+                  PACK_EXCLUDE_DIRS: ${{ inputs.pack-exclude-dirs }}
+              run: |
+                  args=()
+                  if [ "$PACK" = "true" ]; then
+                      args+=(--pack)
+                      for d in $PACK_EXCLUDE_DIRS; do args+=(--exclude-dir "$d"); done
+                  fi
                   dot-ci/scripts/package.sh project "${{ steps.v.outputs.version }}" \
                       --out "$RUNNER_TEMP/dist" \
-                      --name "${{ github.event.repository.name }}"
+                      --name "${{ github.event.repository.name }}" "${args[@]}"
 
             # GH_REPO is not belt and braces, it is the whole thing working. `gh`
             # works out which repository it is talking to from the git remote of the

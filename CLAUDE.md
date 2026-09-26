@@ -53,4 +53,7 @@ The scripts, unlike the workflows, run on a laptop and should be exercised there
 ```bash
 GODOT=godot scripts/check.sh ../dot-cloud
 scripts/package.sh ../dot-cloud 0.2.0 --out /tmp/out
+scripts/package.sh ../game-arena 0.2.0 --out /tmp/out --pack   # imported first
 ```
+
+**A game's `-pack.zip` was checked against the pack dot-server-deploy publishes from the same tree** (2026-09-26, game-arena): every file the deployed pack has is in it, under the same paths, with `.godot/imported/` moved to `_imported/` the way `DotCloudPublisher` moves it. Re-run that comparison (decode `dist/tmc/<game>/manifest.json`'s payload, diff the paths) after changing what `--pack` includes; the two publishers producing different packs from one tree is the drift to watch for.
