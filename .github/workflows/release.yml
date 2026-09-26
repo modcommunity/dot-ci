@@ -159,16 +159,35 @@ jobs:
               run: |
                   set -euo pipefail
                   echo "attaching to ${GH_REPO} @ ${TAG}"
+                  # [b]Created as a DRAFT, and published only once every file is on
+                  # it.[/b] `gh release upload` attaches files one at a time, and
+                  # website-city's sync reads a release whenever its tick lands: a
+                  # read between the tarball and the pack zip queued a fetch of the
+                  # tarball alone, published THAT as the game's pack (with no
+                  # `-pack.zip` it takes every file), and then refused the real zip,
+                  # because a release is published once. The sync skips drafts, so it
+                  # sees this release appear with everything already attached.
+                  #
+                  # A release something else created first is already public and
+                  # cannot be hidden again; the site re-fetches a release whose file
+                  # list changes, which covers that case from its end.
+                  created=0
                   if ! gh release view "$TAG" >/dev/null 2>&1; then
-                      args=(--title "$TAG" --generate-notes)
+                      args=(--title "$TAG" --generate-notes --draft --verify-tag)
                       [ "$PRERELEASE" = "true" ] && args+=(--prerelease)
                       gh release create "$TAG" "${args[@]}"
+                      created=1
                   else
                       echo "release $TAG already exists; uploading into it"
                   fi
                   # --clobber so a re-run of a failed job replaces a half-uploaded
                   # asset instead of failing on the name already being taken.
                   gh release upload "$TAG" "$RUNNER_TEMP"/dist/* --clobber
+                  # Also publishes a draft a failed earlier run left behind: its
+                  # files have just been replaced whole.
+                  if [ "$created" = 1 ] || [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" = "true" ]; then
+                      gh release edit "$TAG" --draft=false
+                  fi
 
             - name: Keep a copy on the run
               uses: actions/upload-artifact@v4
