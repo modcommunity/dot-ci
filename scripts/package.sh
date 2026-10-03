@@ -28,7 +28,7 @@
 #   format -- it has no addons (they are gitignored links) and no .godot/imported, and
 #   a mounted pack is never re-imported, so every texture and model in it would fail
 #   to load and say nothing. The pack zip is the tracked tree minus what the host
-#   already has or no player needs (addons, examples, tools, screenshots, and any
+#   already has or no player needs (addons, examples, tools, screenshots, images, and any
 #   --exclude-dir), plus exactly the imported outputs the remaining .import files
 #   name. It is UNSIGNED: website-city publishes a release file ending in -pack.zip in
 #   place of everything else on the release, and signs it there.
@@ -56,9 +56,12 @@ NAME=""
 PACK=0
 # What a game pack never carries, at any depth. addons/ above all: every dot-* addon
 # is already in the host build, and packing a game with its addons produced an 11 MiB
-# pack of which the game was a fraction. The same list dot-server-deploy's
-# content/<id>/pack.json files give, which is what a pack published from there holds.
-EXCLUDE_DIRS=(addons examples tools screenshots .github)
+# pack of which the game was a fraction. images/ is a README's pictures: every game's
+# preview GIFs went in on 2026-10-03 and the next pack was 71 MiB of a 4 MiB game, every
+# byte of it downloaded by every player on connect and loaded by nothing. The same list
+# dot-server-deploy's content/<id>/pack.json files give, which is what a pack published
+# from there holds.
+EXCLUDE_DIRS=(addons examples tools screenshots images .github)
 while [ $# -gt 0 ]; do
     case "$1" in
         --out)  OUT="${2:?--out needs a directory}"; shift 2 ;;

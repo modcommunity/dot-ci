@@ -47,7 +47,7 @@ on:
             pack-exclude-dirs:
                 description: >-
                     Directory names, space-separated, left out of the pack on top of
-                    addons, examples, tools, screenshots and .github. The same list the
+                    addons, examples, tools, screenshots, images and .github. The same list the
                     game's content/<id>/pack.json gives dot-server-deploy.
                 type: string
                 default: ''
