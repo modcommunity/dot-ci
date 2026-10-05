@@ -126,7 +126,14 @@ jobs:
                       gh release create "$TAG" --title "$TAG" --generate-notes --draft --verify-tag
                       created=1
                   fi
-                  gh release upload "$TAG" "$RUNNER_TEMP"/dist/* --clobber
+                  # One at a time. `gh release upload` sends a batch in parallel, and with
+                  # thirty-one files one of them came back "ReleaseAsset.name already
+                  # exists" (HTTP 422) and failed the step with seven attached. A game's
+                  # release has three files and never met it.
+                  for f in "$RUNNER_TEMP"/dist/*; do
+                      gh release upload "$TAG" "$f" --clobber \
+                          || { sleep 5; gh release upload "$TAG" "$f" --clobber; }
+                  done
                   if [ "$created" = 1 ] || [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" = "true" ]; then
                       gh release edit "$TAG" --draft=false
                   fi
