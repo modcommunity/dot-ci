@@ -1,0 +1,132 @@
+# Tag a MAP repository and every map in it lands on the release as a pack zip of its own.
+#
+# A map repository (g2gfast-maps) holds source maps and no Godot project: the game that
+# plays them is what imports them, and a pack needs the imported outputs. So this checks
+# the game out beside the maps, links the maps in where the game looks for them, imports
+# the game, and packs each map directory with scripts/package-subpacks.sh. website-city's
+# release sync publishes each `<id>-<version>-pack.zip` as `<owner>/<id>@<version>`.
+#
+# Signs nothing and writes to no content origin, like release.yml: the site signs.
+name: Release maps
+
+on:
+    workflow_call:
+        inputs:
+            game:
+                description: The game repository that imports these maps, owner/name.
+                type: string
+                required: true
+            game-ref:
+                description: Which of the game's refs to import with.
+                type: string
+                default: main
+            maps-dir:
+                description: The directory in THIS repository holding one directory per map.
+                type: string
+                default: maps
+            link-at:
+                description: Where in the game's project the maps directory is linked.
+                type: string
+                default: maps/imported
+            version:
+                description: >-
+                    The version to name the packs with. Empty takes it from the tag, which
+                    is the usual case and the only one that cannot disagree with what was
+                    pushed.
+                type: string
+                default: ''
+        secrets:
+            DEPS_TOKEN:
+                description: Reads the game and the addons it declares if they are private.
+                required: false
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        timeout-minutes: 45
+        steps:
+            - name: Check out the maps
+              uses: actions/checkout@v4
+              with:
+                  path: maps-repo
+                  fetch-depth: 1
+            - name: Check out the game that imports them
+              uses: actions/checkout@v4
+              with:
+                  repository: ${{ inputs.game }}
+                  ref: ${{ inputs.game-ref }}
+                  path: project
+                  token: ${{ secrets.DEPS_TOKEN || github.token }}
+            - name: Check out the CI scripts this workflow belongs to
+              uses: actions/checkout@v4
+              with:
+                  repository: modcommunity/dot-ci
+                  ref: ${{ github.job_workflow_sha }}
+                  path: dot-ci
+            - name: Work out the version
+              id: v
+              env:
+                  GIVEN: ${{ inputs.version }}
+              run: |
+                  version="$GIVEN"
+                  if [ -z "$version" ]; then
+                      case "${{ github.ref }}" in
+                          refs/tags/*) version="${{ github.ref_name }}" ;;
+                          *) echo "no tag and no version input: nothing to name this" >&2; exit 1 ;;
+                      esac
+                  fi
+                  echo "version=${version#v}" >> "$GITHUB_OUTPUT"
+                  echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            - name: Install the runtime's shared libraries
+              run: |
+                  sudo apt-get update -qq
+                  sudo apt-get install -y -qq --no-install-recommends \
+                      libfontconfig1 libx11-6 libxcursor1 libxinerama1 libxrandr2 libxi6 zip
+            - name: Fetch and verify the runtime
+              run: |
+                  version="$(dot-ci/scripts/fetch-godot.sh --version)"
+                  GODOT="$(dot-ci/scripts/fetch-godot.sh --dest ~/.godot-ci/$version)"
+                  echo "GODOT=$GODOT" >> "$GITHUB_ENV"
+                  "$GODOT" --version
+            - name: Resolve the addons the game declares
+              env:
+                  DEPS_TOKEN: ${{ secrets.DEPS_TOKEN }}
+              run: dot-ci/scripts/resolve-deps.sh project
+            - name: Link the maps in where the game looks for them
+              env:
+                  MAPS_DIR: ${{ inputs.maps-dir }}
+                  LINK_AT: ${{ inputs.link-at }}
+              run: |
+                  set -euo pipefail
+                  mkdir -p "project/$(dirname "$LINK_AT")"
+                  rm -rf "project/$LINK_AT"
+                  ln -s "$GITHUB_WORKSPACE/maps-repo/$MAPS_DIR" "project/$LINK_AT"
+                  ls "project/$LINK_AT" | head
+            - name: Import the game, maps and all
+              run: timeout 1800 "$GODOT" --headless --path project --import || true
+            - name: Pack every map
+              env:
+                  LINK_AT: ${{ inputs.link-at }}
+              run: |
+                  set -euo pipefail
+                  GODOT="$GODOT" dot-ci/scripts/package-subpacks.sh project \
+                      "${{ steps.v.outputs.version }}" --root "$LINK_AT" --out "$RUNNER_TEMP/dist"
+            - name: Attach them to the release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
+                  TAG: ${{ steps.v.outputs.tag }}
+              run: |
+                  set -euo pipefail
+                  created=0
+                  if ! gh release view "$TAG" >/dev/null 2>&1; then
+                      gh release create "$TAG" --title "$TAG" --generate-notes --draft --verify-tag
+                      created=1
+                  fi
+                  gh release upload "$TAG" "$RUNNER_TEMP"/dist/* --clobber
+                  if [ "$created" = 1 ] || [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" = "true" ]; then
+                      gh release edit "$TAG" --draft=false
+                  fi
