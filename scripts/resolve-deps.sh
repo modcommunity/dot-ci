@@ -25,9 +25,10 @@
 # would be a second copy of fifty-odd lists, which is the exact bug projects.tsv was
 # written to stop and which this family has already shipped three times.
 #
-# A project with no /addons/<name> lines needs nothing (dot-core), or vendors its own
-# (dot-server-deploy, whose .gitignore is a bare `/addons/` -- "ignore the lot", which
-# names nothing to link and must not be read as "link everything").
+# A project with no /addons/<name> lines needs nothing (dot-core). dot-server-deploy's
+# .gitignore is a bare `/addons/` -- "ignore the lot", which names nothing to link and
+# must not be read as "link everything" -- and its list is its `addons.lock` instead,
+# resolved at the locked refs (see below).
 #
 # THE OWNER SPLIT IS ENCODED HERE, AND THAT IS A THIRD COPY ON PURPOSE
 #
@@ -87,13 +88,43 @@ addon_owner() {
 mapfile -t ADDONS < <(grep -oE '^/addons/[a-z0-9_]+$' "$PROJECT/.gitignore" 2>/dev/null \
     | sed 's|^/addons/||' | sort -u)
 
+# [b]A project with an `addons.lock` is checked at the refs it ships, not at main.[/b]
+#
+# dot-server-deploy's .gitignore is a bare `/addons/` and names nothing, so until this
+# existed its CI could not resolve a single addon and ran with the Godot check switched
+# off -- shell syntax only. Its lock names the release tag of every addon a server
+# installs, and a box clones exactly those (setup.sh). So the lock is the list, and each
+# addon is cloned at its locked ref rather than at the tip of main: a check against main
+# passes for a host script that calls an addon API no tag has yet, and that is precisely
+# how a server came to boot with no host on 2026-10-04 while every check was green.
+#
+# The lock is repo<TAB>ref; the addon directory is the repository's own, by the inverse
+# of addon_repo.
+declare -A REF=()
+LOCK="$PROJECT/addons.lock"
+
+if [ -f "$LOCK" ]; then
+    ADDONS=()
+    while IFS=$'\t' read -r repo ref _; do
+        [ -z "$repo" ] && continue
+        case "$repo" in \#*) continue ;; esac
+        case "$repo" in
+            zee-dot-weapons) addon=zee_weapons ;;
+            *)               addon="${repo//-/_}" ;;
+        esac
+        ADDONS+=("$addon")
+        REF[$addon]="$ref"
+    done < "$LOCK"
+    printf 'addons from %s (%d, at their locked refs)\n' "$(basename "$LOCK")" "${#ADDONS[@]}"
+fi
+
 if [ "${#ADDONS[@]}" -eq 0 ]; then
     printf 'no addon dependencies declared in %s/.gitignore\n' "$(basename "$PROJECT")" >&2
     exit 0
 fi
 
 if [ "$MODE" = "--print" ]; then
-    for a in "${ADDONS[@]}"; do printf '%s\t%s\n' "$a" "$(addon_repo "$a")"; done
+    for a in "${ADDONS[@]}"; do printf '%s\t%s\t%s\n' "$a" "$(addon_repo "$a")" "${REF[$a]:-default branch}"; done
     exit 0
 fi
 
@@ -133,30 +164,34 @@ fails=0
 for addon in "${ADDONS[@]}"; do
     repo="$(addon_repo "$addon")"
     owner="$(addon_owner "$repo")"
+    ref="${REF[$addon]:-}"
+    # A locked clone is kept under its ref, so a cache from another lock (or from a
+    # main-branch run) is never mistaken for it.
+    clone="$repo${ref:+@$ref}"
 
-    if [ ! -d "$DEPS_DIR/$repo/.git" ]; then
+    if [ ! -d "$DEPS_DIR/$clone/.git" ]; then
         # --depth 1: CI wants the files, never the history, and dot-core's history is
         # larger than every addon it ships. The token is interpolated into the URL
         # rather than passed as an argument so it is never a separate word anything
         # logs; git itself keeps it out of the error text.
-        if ! err="$(git clone --quiet --depth 1 \
+        if ! err="$(git clone --quiet --depth 1 ${ref:+--branch "$ref"} \
             "https://${CREDENTIAL}${GIT_HOST}/${owner}/${repo}.git" \
-            "$DEPS_DIR/$repo" 2>&1)"; then
+            "$DEPS_DIR/$clone" 2>&1)"; then
             # git echoes the URL it was given, and the URL carries the token. Redacted
             # here rather than discarded: a clone failure with no reason printed is
             # half an hour of guessing between "the token cannot see it", "the
             # repository is not created yet" and "the name is wrong", and those want
             # three different fixes.
-            printf '  FAIL  could not clone %s/%s (for addons/%s)\n        %s\n' \
-                "$owner" "$repo" "$addon" \
+            printf '  FAIL  could not clone %s/%s%s (for addons/%s)\n        %s\n' \
+                "$owner" "$repo" "${ref:+ at $ref}" "$addon" \
                 "$(printf '%s' "$err" | _redact | tr '\n' ' ')" >&2
             fails=$((fails + 1))
             continue
         fi
     fi
 
-    if [ ! -d "$DEPS_DIR/$repo/addons/$addon" ]; then
-        printf '  FAIL  %s has no addons/%s\n' "$repo" "$addon" >&2
+    if [ ! -d "$DEPS_DIR/$clone/addons/$addon" ]; then
+        printf '  FAIL  %s has no addons/%s\n' "$clone" "$addon" >&2
         fails=$((fails + 1))
         continue
     fi
@@ -167,8 +202,8 @@ for addon in "${ADDONS[@]}"; do
     # make one, and Godot then reads a one-line text file where a directory should be
     # and registers not one class_name.
     rm -rf "${PROJECT:?}/addons/$addon"
-    ln -s "../.deps/$repo/addons/$addon" "$PROJECT/addons/$addon"
-    printf '  linked addons/%s -> %s\n' "$addon" "$repo"
+    ln -s "../.deps/$clone/addons/$addon" "$PROJECT/addons/$addon"
+    printf '  linked addons/%s -> %s\n' "$addon" "$clone"
 done
 
 printf '%d addon(s) declared, %d failed\n' "${#ADDONS[@]}" "$fails"

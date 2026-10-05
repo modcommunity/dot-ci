@@ -20,7 +20,7 @@ If a third owner ever appears, that is the moment this stops being defensible an
 
 ## What is not copied, and must not be
 
-The addon dependencies come from each project's own `.gitignore`, from its `/addons/<name>` lines — the same derivation `bootstrap.sh` does. A manifest here would be a second copy of fifty-odd lists, which is the bug `projects.tsv` was written to stop and which this family has shipped three times already.
+The addon dependencies come from each project's own `.gitignore`, from its `/addons/<name>` lines — the same derivation `bootstrap.sh` does. **A project with an `addons.lock` (dot-server-deploy) is resolved from the lock instead, each addon cloned at its locked ref** — the refs a box installs. Before that, dot-server-deploy's bare `/addons/` named nothing, its CI ran with Godot off, and on 2026-10-04 a host script calling an untagged addon API passed CI and broke a live server. Checking against main would have passed it too: only the lock is what ships. A manifest here would be a second copy of fifty-odd lists, which is the bug `projects.tsv` was written to stop and which this family has shipped three times already.
 
 `/addons/` on its own means "this project vendors its addons" and names nothing to link. The pattern is anchored and single-segment (`^/addons/[a-z0-9_]+$`) precisely so that it does not match, because the failure mode of getting it wrong is not "nothing happens" — it is resolving zero addons versus resolving all of them.
 
