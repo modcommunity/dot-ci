@@ -51,6 +51,14 @@ on:
                     game's content/<id>/pack.json gives dot-server-deploy.
                 type: string
                 default: ''
+            server-compat:
+                description: >-
+                    With `pack`, refuse to release a pack whose requires.json asks for more
+                    than the newest released dot-server-deploy installs (its addons.lock, at
+                    each addon's locked level). False only for a game aimed at a deployment
+                    of its own. See scripts/server-compat.sh.
+                type: boolean
+                default: true
         secrets:
             DEPS_TOKEN:
                 description: Reads the private addons the project declares. Only `pack` needs it.
@@ -150,6 +158,20 @@ jobs:
             # fails with "could not determine repository" no matter what the token is
             # allowed to do. Naming it explicitly is also simply more honest than
             # depending on a checkout path two steps away.
+            # [b]Before the release exists, so a refusal publishes nothing.[/b] The site
+            # publishes a game's pack from its GitHub release, so a release that is created
+            # and then found wanting has already reached every server that restarts. On
+            # 2026-10-04 a game needing an addon API that existed only as untagged commits
+            # was released, published, and refused by a live server at boot.
+            - name: A released server can run this pack
+              if: inputs.pack && inputs.server-compat
+              env:
+                  DEPS_TOKEN: ${{ secrets.DEPS_TOKEN }}
+              run: |
+                  set -euo pipefail
+                  for zip in "$RUNNER_TEMP"/dist/*-pack.zip; do
+                      dot-ci/scripts/server-compat.sh "$zip"
+                  done
             - name: Attach it to the release
               env:
                   GH_TOKEN: ${{ github.token }}
