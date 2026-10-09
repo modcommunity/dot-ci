@@ -70,6 +70,8 @@ If you do create it: an organisation secret on the addons' side, and the same to
 
 **Every script parses.** `--import` first, because that pass is what registers the `class_name` globals; without it every cross-file type reference fails at once and one missing pass reads as dozens of unrelated errors. Then `--check-only` per script, on the files *git tracks* — which is exactly this repository's own source, because the linked dependencies are gitignored in every project here.
 
+**A game's maps repository is linked in when the game asks.** A comment line `# bootstrap-link: <repo>/<dir> ci` directly above an ignored path in the game's `.gitignore` makes `resolve-deps.sh` shallow-clone `<repo>` (the games' owner) and link `<dir>` there — the same line `bootstrap.sh` reads on a workstation, which only looks at the third field. The trailing `ci` is an opt-in and the default is off, because one maps repository is 1.8 GB; a link without it is left to the game's suites, which must cope with the directory being absent. Needs `validate.yml@v1.3.0` or later.
+
 **Then every suite runs**, because a clean parse says the files are valid GDScript and nothing whatsoever about whether the thing works.
 
 **Capped with a timeout, which is not tidiness.** A scene whose script fails to parse *hangs* rather than failing: the identifier does not resolve, the scene never loads, and nothing ever reaches `get_tree().quit()`. Uncapped, that is a runner sitting at the six-hour job limit with no output, reported as an infrastructure problem.

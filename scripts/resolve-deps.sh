@@ -118,13 +118,36 @@ if [ -f "$LOCK" ]; then
     printf 'addons from %s (%d, at their locked refs)\n' "$(basename "$LOCK")" "${#ADDONS[@]}"
 fi
 
-if [ "${#ADDONS[@]}" -eq 0 ]; then
+# [b]Content a project links from another repository, when it asks for it here.[/b]
+#
+# A game's maps can live in a repository of their own (game-playground-maps, the mg-*
+# -maps), linked in by bootstrap.sh from a comment directly above the ignored path:
+#
+#     # bootstrap-link: game-playground-maps/maps ci
+#     /maps/custom
+#
+# Without the link a runner checks a game with none of its maps, and every suite that
+# loads one fails -- game-playground's CI was red for two days over twelve documents it
+# could not see. The trailing `ci` is an OPT-IN, and the default is no on purpose:
+# g2gfast-maps is 1.8 GB, and two games link it. A link without `ci` is left to the
+# suite, which is expected to cope with the directory being absent. bootstrap.sh reads
+# only the third field, so the extra word costs it nothing.
+#
+# Each line is: path<TAB>repo<TAB>path inside the repo.
+mapfile -t CONTENT < <(awk '/^# bootstrap-link: /{src=$3; ci=($4=="ci"); next}
+    src!="" && ci && /^\//{p=$0; sub(/^\//,"",p); sub(/\/$/,"",p);
+        r=src; sub(/\/.*/,"",r); sub_=src; sub(/^[^\/]*\/?/,"",sub_);
+        print p "\t" r "\t" sub_}
+    {src=""; ci=0}' "$PROJECT/.gitignore" 2>/dev/null)
+
+if [ "${#ADDONS[@]}" -eq 0 ] && [ "${#CONTENT[@]}" -eq 0 ]; then
     printf 'no addon dependencies declared in %s/.gitignore\n' "$(basename "$PROJECT")" >&2
     exit 0
 fi
 
 if [ "$MODE" = "--print" ]; then
     for a in "${ADDONS[@]}"; do printf '%s\t%s\t%s\n' "$a" "$(addon_repo "$a")" "${REF[$a]:-default branch}"; done
+    for c in "${CONTENT[@]}"; do printf 'content\t%s\n' "$c"; done
     exit 0
 fi
 
@@ -207,4 +230,36 @@ for addon in "${ADDONS[@]}"; do
 done
 
 printf '%d addon(s) declared, %d failed\n' "${#ADDONS[@]}" "$fails"
+
+for line in "${CONTENT[@]}"; do
+    IFS=$'\t' read -r path repo inner <<< "$line"
+    owner="$(addon_owner "$repo")"
+    if [ ! -d "$DEPS_DIR/$repo/.git" ]; then
+        if ! err="$(git clone --quiet --depth 1 \
+            "https://${CREDENTIAL}${GIT_HOST}/${owner}/${repo}.git" \
+            "$DEPS_DIR/$repo" 2>&1)"; then
+            printf '  FAIL  could not clone %s/%s (for %s)\n        %s\n' \
+                "$owner" "$repo" "$path" "$(printf '%s' "$err" | _redact | tr '\n' ' ')" >&2
+            fails=$((fails + 1))
+            continue
+        fi
+    fi
+    target="$DEPS_DIR/$repo${inner:+/$inner}"
+    if [ ! -d "$target" ]; then
+        printf '  FAIL  %s has no %s\n' "$repo" "${inner:-root}" >&2
+        fails=$((fails + 1))
+        continue
+    fi
+    # A relative link, like the addons', climbing out of the directory the link sits
+    # in: maps/custom sits in maps/, so ../.deps/...; a top-level courses, ./.deps/...
+    parent="$(dirname "$path")"
+    up="."
+    [ "$parent" != "." ] && up="$(printf '%s' "$parent" | sed 's|[^/][^/]*|..|g')"
+    mkdir -p "$(dirname "$PROJECT/$path")"
+    rm -rf "${PROJECT:?}/$path"
+    ln -s "$up/.deps/$repo${inner:+/$inner}" "$PROJECT/$path"
+    printf '  linked %s -> %s%s\n' "$path" "$repo" "${inner:+/$inner}"
+done
+
+[ "${#CONTENT[@]}" -gt 0 ] && printf '%d content link(s)\n' "${#CONTENT[@]}"
 exit $((fails > 0))
