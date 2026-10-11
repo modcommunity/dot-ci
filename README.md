@@ -1,6 +1,6 @@
 # dot-ci
 
-The checks and the release packaging every project in this family shares, as two reusable GitHub Actions workflows and four shell scripts.
+The checks and the release packaging every project in this family shares, as three reusable GitHub Actions workflows (validate, release, release-maps) and six shell scripts.
 
 A repository here gets a `.github/workflows/` of about twenty lines and no knowledge of how any of it works. Everything that is actually hard — that the addons have to be fetched before a single script will parse, which runtime and which digest, which scenes are suites, which engine output is noise and which is a failure, what an addon's distributable actually is — lives here once. Fixing one of those is a commit, not sixty commits.
 

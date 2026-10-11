@@ -1,5 +1,5 @@
 # This repository's own check. There is no way to test a reusable workflow except by
-# calling it, so what is checkable here is the four scripts and the shape of the YAML
+# calling it, so what is checkable here is the six scripts and the shape of the YAML
 # -- and that is worth having, because a mistake in this repository is not one red
 # repository, it is sixty.
 name: CI
