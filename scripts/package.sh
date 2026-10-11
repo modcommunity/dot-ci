@@ -61,7 +61,11 @@ PACK=0
 # byte of it downloaded by every player on connect and loaded by nothing. The same list
 # dot-server-deploy's content/<id>/pack.json files give, which is what a pack published
 # from there holds.
-EXCLUDE_DIRS=(addons examples tools screenshots images .github)
+# docs/ and every *.md are the repository's documentation: read by people and agents,
+# loaded by nothing at runtime (no game opens a .md), and since 2026-10-10 most of a
+# game's text lives in docs/. DotCloudPublisher drops *.md and the content/<id>/pack.json
+# files list docs/ for the same reason.
+EXCLUDE_DIRS=(addons examples tools screenshots images docs .github)
 while [ $# -gt 0 ]; do
     case "$1" in
         --out)  OUT="${2:?--out needs a directory}"; shift 2 ;;
@@ -169,6 +173,7 @@ if [ "${#artifacts[@]}" -eq 0 ]; then
         # A script's .uid sidecar is editor bookkeeping; DotCloudPublisher leaves it out
         # too, and the two publishers should produce the same pack from the same tree.
         find "$PACK_DIR" -name '*.gd.uid' -type f -delete || exit 1
+        find "$PACK_DIR" -name '*.md' -type f -delete || exit 1
 
         # The imported outputs, chosen by the .import files that SURVIVED the
         # exclusions rather than by copying .godot/imported whole. That directory holds
