@@ -46,7 +46,7 @@
 #   DEPS_TOKEN   a token that can read the private addon repositories
 #   GIT_HOST     default github.com
 #   DOT_OWNER    default modcommunity   (the addons)
-#   GAME_OWNER   default gamemann       (the games, and the weapons pack)
+#   GAME_OWNER   default zees-games     (the games, and the weapons packs)
 #
 set -uo pipefail
 
@@ -58,18 +58,20 @@ PROJECT="$(cd "$PROJECT" && pwd -P)"
 
 GIT_HOST="${GIT_HOST:-github.com}"
 DOT_OWNER="${DOT_OWNER:-modcommunity}"
-GAME_OWNER="${GAME_OWNER:-gamemann}"
+GAME_OWNER="${GAME_OWNER:-zees-games}"
 DEPS_DIR="$PROJECT/.deps"
 
 ## The repository an addon directory lives in.
 ##
-## dot_user_avatar -> dot-user-avatar, true for every link in the family except one:
-## the weapons pack took the prefix `zee_` so it could sit on top of the family
-## without colliding with it, and its repository is named for what it IS rather than
-## for its prefix. Same exception setup.sh's addon_repo() carries.
+## dot_user_avatar -> dot-user-avatar, true for every link in the family except the
+## weapons packs: each took a prefix (`zee_`, `zed_`) so it could sit on top of the family
+## without colliding with it, and its repository is named for what it IS rather than for
+## its prefix (zee-dot-weapons, zed-dot-weapons). Same exception setup.sh's addon_repo()
+## carries.
 addon_repo() {
     case "$1" in
         zee_weapons) printf 'zee-dot-weapons\n' ;;
+        zed_weapons) printf 'zed-dot-weapons\n' ;;
         *)           printf '%s\n' "${1//_/-}" ;;
     esac
 }
@@ -110,6 +112,7 @@ if [ -f "$LOCK" ]; then
         case "$repo" in \#*) continue ;; esac
         case "$repo" in
             zee-dot-weapons) addon=zee_weapons ;;
+            zed-dot-weapons) addon=zed_weapons ;;
             *)               addon="${repo//-/_}" ;;
         esac
         ADDONS+=("$addon")

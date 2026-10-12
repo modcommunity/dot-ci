@@ -27,7 +27,7 @@
 #   SERVER_REPO   default modcommunity/dot-server-deploy
 #   DEPS_TOKEN    optional; read access for private repositories (never printed)
 #   DOT_OWNER     default modcommunity   (the addons)
-#   GAME_OWNER    default gamemann       (zee-dot-weapons, the one addon that is not)
+#   GAME_OWNER    default zees-games     (zee-dot-weapons and zed-dot-weapons, the addons that are not)
 set -uo pipefail
 
 INPUT="${1:-}"
@@ -45,7 +45,7 @@ done
 export INPUT SERVER_REF
 export SERVER_REPO="${SERVER_REPO:-modcommunity/dot-server-deploy}"
 export DOT_OWNER="${DOT_OWNER:-modcommunity}"
-export GAME_OWNER="${GAME_OWNER:-gamemann}"
+export GAME_OWNER="${GAME_OWNER:-zees-games}"
 
 exec python3 - <<'PY'
 import json, os, re, subprocess, sys, urllib.error, urllib.request, zipfile
@@ -109,7 +109,9 @@ for line in lock_text.splitlines():
 
 
 def repo_of(addon):
-    return "zee-dot-weapons" if addon == "zee_weapons" else addon.replace("_", "-")
+    if addon in ("zee_weapons", "zed_weapons"):
+        return addon.replace("_weapons", "-dot-weapons")
+    return addon.replace("_", "-")
 
 
 def owner_of(r):
