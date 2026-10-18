@@ -14,6 +14,7 @@
 #   SUITES        the scenes to run, space separated, relative and without .tscn.
 #                 Empty means auto-detect -- see below.
 #   SUITE_TIMEOUT seconds per suite (default 300)
+#   PARSE_PER_FILE  set to force the old one-process-per-script parse pass
 #
 # THE TIMEOUT IS LOAD BEARING, NOT TIDINESS. A scene whose script fails to parse
 # HANGS rather than failing: the identifier does not resolve, the scene never loads,
@@ -86,15 +87,54 @@ echo "importing"
 timeout 600 "$GODOT" --headless --path . --import >/dev/null 2>&1
 
 echo "parsing"
-while read -r f; do
-    out="$(timeout 120 "$GODOT" --headless --path . --check-only --script "res://${f#./}" 2>&1 \
-        | grep -Ev '^(Godot Engine v|$)' \
-        | grep -Eiv "$NOISE")"
-    if [ -n "$out" ]; then
-        printf '  %sFAIL%s %s\n%s\n' "$RED" "$OFF" "$f" "$out"
+PARSE_TOOL=addons/dot_core/tools/dot_parse_all.gd
+if [ -f "$PARSE_TOOL" ] && [ -z "${PARSE_PER_FILE:-}" ]; then
+    # ONE process for every script, when the project's dot-core has the tool: about ten
+    # times faster than a start-up per file (66 scripts: 40 s against 4 s) and the same
+    # verdicts. The tool prints a PARSE> marker on stderr before each script, so the
+    # same rule as below -- ANY unfiltered output is a failure -- still attributes to a
+    # file. Output before the first marker (the banner) and after PARSE_END (shutdown)
+    # belongs to no script and goes through the same noise filter, then is ignored.
+    list="$(mktemp)"; log="$(mktemp)"
+    project_scripts > "$list"
+    PARSE_LIST="$list" timeout 900 "$GODOT" --headless --path . --script "res://$PARSE_TOOL" >"$log" 2>&1
+    cur=""; curout=""; finished=0
+    flush() {
+        if [ -n "$cur" ] && [ -n "$curout" ]; then
+            printf '  %sFAIL%s %s\n%s\n' "$RED" "$OFF" "$cur" "$curout"
+            fails=$((fails + 1))
+        fi
+    }
+    while IFS= read -r line; do
+        case "$line" in
+            'PARSE> '*) flush; cur="${line#PARSE> res://}"; curout="" ;;
+            'PARSE_END') flush; cur=""; curout="" ;;
+            'PARSED '*) finished=1 ;;
+            'PARSE_FAIL '*) [ -n "$cur" ] && [ -z "$curout" ] && curout="$line" ;;
+            *)  [ -n "$cur" ] || continue
+                printf '%s\n' "$line" | grep -Ev '^(Godot Engine v|$)' | grep -Eiq "$NOISE" && continue
+                [ -z "$(printf '%s' "$line" | grep -Ev '^(Godot Engine v|$)')" ] && continue
+                curout="${curout:+$curout$'\n'}$line" ;;
+        esac
+    done < "$log"
+    # No PARSED line means the tool itself died or timed out: that is a failure, not a pass.
+    if [ "$finished" -eq 0 ]; then
+        printf '  %sFAIL%s the parse tool did not finish\n' "$RED" "$OFF"
+        tail -n 20 "$log"
         fails=$((fails + 1))
     fi
-done < <(project_scripts)
+    rm -f "$list" "$log"
+else
+    while read -r f; do
+        out="$(timeout 120 "$GODOT" --headless --path . --check-only --script "res://${f#./}" 2>&1 \
+            | grep -Ev '^(Godot Engine v|$)' \
+            | grep -Eiv "$NOISE")"
+        if [ -n "$out" ]; then
+            printf '  %sFAIL%s %s\n%s\n' "$RED" "$OFF" "$f" "$out"
+            fails=$((fails + 1))
+        fi
+    done < <(project_scripts)
+fi
 
 [ "$fails" -eq 0 ] && printf '  %sok%s   every script parses\n' "$GRN" "$OFF"
 
