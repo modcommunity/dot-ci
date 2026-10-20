@@ -108,7 +108,12 @@ trap 'rm -rf "$STAGE"' EXIT
 ## symlink test, which is right on Linux and wrong on Windows -- where the family
 ## COPIES addons rather than linking them, and a copied dependency is indistinguishable
 ## from owned source by any test except this one.
-mapfile -t OWNED < <(git ls-files 'addons/*' | cut -d/ -f2 | sort -u)
+##
+## Only a directory with a plugin.cfg is an addon. A game may track folders of its own
+## under addons/ (hook folders it finds at boot, with no plugin.cfg): counted as addons,
+## they made the game an "addon repository", --pack was ignored, and the release then
+## failed for want of a pack zip.
+mapfile -t OWNED < <(git ls-files 'addons/*/plugin.cfg' | cut -d/ -f2 | sort -u)
 
 artifacts=()
 
