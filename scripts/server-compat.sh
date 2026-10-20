@@ -20,7 +20,14 @@
 # installs, and each addon's level is the `const LEVEL` / `const OLDEST` in its
 # addons/<addon>/<addon>_api.gd at that ref (absent means 1, as DotAddonApi reads it).
 # A game passes when, for every addon it names: the lock has it, need <= LEVEL, and
-# need >= OLDEST. The fix for a failure is never here -- it is to tag the addon, bump the
+# need >= OLDEST.
+#
+# The newest released server is the newest tag whose PINNED CLIENT BUILD was exported
+# from its own lock. A game pack carries no addons and runs on the ones compiled into
+# the client build its server names (web/shell-build); a tag whose lock moved past that
+# build is refused at Play however new its lock is. The server repository records
+# sha256 of the lock its pinned build came from in web/shell-build.inputs, and a tag
+# whose record disagrees is skipped (a tag with no record predates it and counts). The fix for a failure is never here -- it is to tag the addon, bump the
 # lock, and release dot-server-deploy, then re-tag the game.
 #
 # Environment:
@@ -48,7 +55,7 @@ export DOT_OWNER="${DOT_OWNER:-modcommunity}"
 export GAME_OWNER="${GAME_OWNER:-zees-games}"
 
 exec python3 - <<'PY'
-import json, os, re, subprocess, sys, urllib.error, urllib.request, zipfile
+import hashlib, json, os, re, subprocess, sys, urllib.error, urllib.request, zipfile
 
 inp = os.environ["INPUT"]
 if inp.endswith(".zip"):
@@ -92,11 +99,45 @@ if not ref:
     if not tags:
         print(f"  FAIL  {repo} has no release tags", file=sys.stderr)
         sys.exit(1)
-    ref = max(tags, key=lambda t: tuple(int(x) for x in t[1:].split(".")))
+    ordered = sorted(tags, key=lambda t: tuple(int(x) for x in t[1:].split(".")), reverse=True)
+else:
+    ordered = [ref]
 
-lock_text = fetch(repo, ref, "addons.lock")
+
+def shell_matches(ref, lock_text):
+    """Whether the client build the server at `ref` pins was exported from its lock.
+
+    A game pack carries no addons: it runs on the addon code compiled into the client
+    build the server names, so a release whose lock moved past its pinned build is one
+    no game built on the new lock can be played on, whatever the lock says. The server
+    repository records sha256 of the lock its pinned build was exported from in
+    web/shell-build.inputs (a `lock<TAB><sha256>` line). No record means a release from
+    before the record existed, which is taken as it always was.
+    """
+    record = fetch(repo, ref, "web/shell-build.inputs")
+    if record is None:
+        return True
+    want = hashlib.sha256(lock_text.encode()).hexdigest()
+    return f"lock\t{want}" in record.splitlines()
+
+
+lock_text = None
+explicit = bool(os.environ.get("SERVER_REF", ""))
+for candidate in ordered:
+    text = fetch(repo, candidate, "addons.lock")
+    if text is None:
+        print(f"  FAIL  {repo}@{candidate} has no addons.lock", file=sys.stderr)
+        sys.exit(1)
+    if shell_matches(candidate, text):
+        ref, lock_text = candidate, text
+        break
+    if explicit:
+        print(f"  FAIL  {repo}@{candidate}: its pinned client build was not exported from its addons.lock", file=sys.stderr)
+        sys.exit(1)
+    print(f"  --    {repo}@{candidate}: its pinned client build was not exported from its lock; not a release players can use, skipped")
+
 if lock_text is None:
-    print(f"  FAIL  {repo}@{ref} has no addons.lock", file=sys.stderr)
+    print(f"  FAIL  no {repo} release pins a client build exported from its own lock", file=sys.stderr)
     sys.exit(1)
 
 lock = {}
