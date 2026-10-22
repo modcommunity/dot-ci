@@ -4,6 +4,15 @@ The checks and the release packaging every project in this family shares, as thr
 
 A repository here gets a `.github/workflows/` of about twenty lines and no knowledge of how any of it works. Everything that is actually hard — that the addons have to be fetched before a single script will parse, which runtime and which digest, which scenes are suites, which engine output is noise and which is a failure, what an addon's distributable actually is — lives here once. Fixing one of those is a commit, not sixty commits.
 
+## First 10 minutes
+
+1. Add the short `.github/workflows/ci.yml` below to your repository; it needs nothing else.
+2. Reproduce what it runs locally with [Running the scripts yourself](#running-the-scripts-yourself): import, parse every script, run the suites.
+3. Push. A failing check names the script and the line.
+4. To release, push a tag such as `v1.2.3`; `release.yml` packages it ([What a release builds](#what-a-release-builds)).
+
+**`@v1` is a floating tag**: it always points at the newest `v1.x.y` (now `v1.3.5`), so a project on `@v1` gets fixes with no edit. Pin `@v1.3.5` for a build that cannot change under you; inputs added later (`pack:`, `bootstrap-link`) name the first version that has them. In a game, the local `./game.sh test` runs the same steps CI does.
+
 ## Calling it
 
 `.github/workflows/ci.yml`, in full:
