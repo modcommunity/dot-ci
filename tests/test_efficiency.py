@@ -218,6 +218,28 @@ class CrossWrapper(unittest.TestCase):
         self.assertIn("1 span repositories", r.stdout)
         self.assertIn("lines x2", r.stdout)
 
+class Trend(unittest.TestCase):
+    REPORT = "repo size hazards lines comment%%\na %d %d 1000 10.0%%\nb 0 0 1000 20.0%%\nduplication (cross): %d clusters\n"
+
+    def go(self, hist, report, *extra):
+        r = subprocess.run([sys.executable, os.path.join(S, "efficiency-trend.py"), "--history", hist, *extra],
+                           input=report, capture_output=True, text=True)
+        return r.returncode, r.stdout
+
+    def test_regression_fails_strict(self):
+        hist = os.path.join(tempfile.mkdtemp(), "h.jsonl")
+        self.assertEqual(self.go(hist, self.REPORT % (2, 1, 3), "--strict")[0], 0)
+        code, out = self.go(hist, self.REPORT % (2, 1, 3), "--strict")
+        self.assertEqual(code, 0)
+        self.assertIn("comment_pct   15.0", out)
+        code, out = self.go(hist, self.REPORT % (3, 1, 3), "--strict")  # the deliberately bad run
+        self.assertEqual(code, 1)
+        self.assertIn("REGRESSED: size", out)
+        self.assertEqual(self.go(hist, self.REPORT % (1, 0, 2), "--strict")[0], 0)  # shrinking is fine
+
+    def test_empty_report(self):
+        self.assertEqual(self.go(os.path.join(tempfile.mkdtemp(), "h"), "nothing\n")[0], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

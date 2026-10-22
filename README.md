@@ -152,3 +152,5 @@ scripts/package.sh ../dot-cloud 0.2.0 --out /tmp/out
 ```
 
 `resolve-deps.sh` is the only one that wants a token, and only when it is actually cloning. On a developer box the addons are already linked and `check.sh` is all you need — which is the same thing each project's own `tools/check.sh` does, kept there because that is where somebody runs it by hand.
+
+`scripts/efficiency-trend.py` reads `efficiency-report.sh` output on stdin, appends the totals to a history file and prints the change since the last run; `--strict` exits 1 when size, hazards or duplicate clusters grew.
