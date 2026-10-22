@@ -154,3 +154,7 @@ scripts/package.sh ../dot-cloud 0.2.0 --out /tmp/out
 `resolve-deps.sh` is the only one that wants a token, and only when it is actually cloning. On a developer box the addons are already linked and `check.sh` is all you need — which is the same thing each project's own `tools/check.sh` does, kept there because that is where somebody runs it by hand.
 
 `scripts/efficiency-trend.py` reads `efficiency-report.sh` output on stdin, appends the totals to a history file and prints the change since the last run; `--strict` exits 1 when size, hazards or duplicate clusters grew.
+
+`scripts/efficiency-nightly.sh` is the nightly check in one command (report table, then the trend with `--strict`); the runner pastes its output into the `chk-efficiency` note.
+
+`scripts/perf-smoke.sh [--init|--update] [--scene S] [--seconds N] <project>` loads the main scene headless, runs it N seconds (default 5) and compares load time, frame time, node count and memory with `ci/perf/smoke.json` in the project. It fails more than 20% over budget (timings get 2.5 times that, because they move between identical runs on a busy machine); `--init` records the budget, `--update` only lowers it. Frame time is the engine's process time with rendering off: a CPU-side ratchet for scripts and node count, not a GPU measure. Run it under `heavy`; it is not yet a `validate.yml` input.

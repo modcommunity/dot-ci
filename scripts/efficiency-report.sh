@@ -19,7 +19,7 @@ count() { # gate dir -> number of known violations
 }
 
 # Duplicate clusters across all the given repositories, once, not per repository.
-dup_out="$(python3 "$here/check-duplication.py" --cross "${dirs[@]}" 2>/dev/null | tail -1)"
+dup_out="$(python3 "$here/check-duplication.py" --cross "${dirs[@]}" 2>/dev/null | head -6)"
 
 printf '%-28s %6s %8s %10s %7s\n' repo size hazards lines comment%
 for d in "${dirs[@]}"; do

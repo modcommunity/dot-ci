@@ -6,6 +6,7 @@ Measured on dev02, 2026-10-22, game-arena (`./game.sh --no-parse test <suite>`, 
 
 - `validate.yml`, `release.yml`, `release-maps.yml`: the shared libraries are installed only when `dpkg -s` says one is missing. The runner image normally has them, so the `apt-get update` (several seconds, one network round trip) is skipped.
 - `release.yml`, `release-maps.yml`: the Godot runtime is cached in `~/.godot-ci` (key `godot-<hash of godot.pin>`), as `validate.yml` already did. A tag build no longer downloads about 60 MB.
+- Checked 2026-10-22: the cache is not inert. Every workflow passes `fetch-godot.sh --dest ~/.godot-ci/<version>`, which overrides the `RUNNER_TOOL_CACHE/dot-godot` default, so the cached path and the fetch destination are the same directory.
 - `ci.yml`: `concurrency` cancels a superseded run on the same ref. It deliberately does not cache the runtime: its fetch step is the end-to-end proof of the pin.
 
 ## Not done, and why

@@ -241,5 +241,24 @@ class Trend(unittest.TestCase):
         self.assertEqual(self.go(os.path.join(tempfile.mkdtemp(), "h"), "nothing\n")[0], 2)
 
 
+class PerfBudget(unittest.TestCase):
+    RES = '{"scene":"res://m.tscn","load_ms":1000,"frame_ms":2,"nodes":%d,"mem_mb":100}'
+
+    def go(self, mode, path, res):
+        return run("perf-budget.py", mode, path, "20", res)
+
+    def test_ratchet(self):
+        path = os.path.join(tempfile.mkdtemp(), "ci", "perf", "smoke.json")
+        self.assertEqual(self.go("init", path, self.RES % 1000)[0], 0)
+        self.assertEqual(self.go("init", path, self.RES % 1000)[0], 1)  # never overwrites
+        self.assertEqual(self.go("check", path, self.RES % 1190)[0], 0)  # inside 20%
+        code, out = self.go("check", path, self.RES % 1300)  # the deliberate regression
+        self.assertEqual(code, 1)
+        self.assertIn("REGRESSED nodes", out)
+        self.assertEqual(self.go("update", path, self.RES % 900)[0], 0)
+        self.assertEqual(self.go("check", path, self.RES % 1100)[0], 1)  # budget fell to 900
+        self.assertEqual(self.go("update", path, self.RES % 2000)[0], 1)  # and never rises
+
+
 if __name__ == "__main__":
     unittest.main()
