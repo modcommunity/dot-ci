@@ -34,6 +34,13 @@ on:
                     shell-command instead.
                 type: boolean
                 default: true
+            efficiency:
+                description: >
+                    Run the efficiency gates (size budgets, per-frame hazards, duplication)
+                    against the baselines under ci/efficiency/. Off by default: a repository
+                    opts in once it has committed its baselines (scripts/check-*.py --init).
+                type: boolean
+                default: false
             shell-command:
                 description: A command to run instead of, or as well as, the Godot check.
                 type: string
@@ -123,6 +130,13 @@ jobs:
             # addons' cfg/addons/*.yml, and nothing at runtime says so.
             - name: Export presets keep cfg/addons
               run: dot-ci/scripts/check-export-filter.sh project
+
+            - name: Efficiency gates (baselines only shrink)
+              if: inputs.efficiency
+              run: |
+                  for g in size frame-hazards duplication; do
+                      python3 dot-ci/scripts/check-$g.py project || exit 1
+                  done
 
             - name: Import, parse, and run every suite
               if: inputs.godot

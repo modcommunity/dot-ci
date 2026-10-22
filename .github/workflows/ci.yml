@@ -25,6 +25,9 @@ jobs:
             - name: Every script parses
               run: for f in scripts/*.sh; do bash -n "$f" || exit 1; done
 
+            - name: Efficiency gate tests
+              run: python3 -m unittest discover -s tests
+
             - name: shellcheck
               run: shellcheck -S warning scripts/*.sh
 

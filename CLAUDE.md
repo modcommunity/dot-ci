@@ -24,6 +24,7 @@ This is not a Godot project. It has no `project.godot`, no `addons/`, and nothin
 | `scripts/resolve-deps.sh` | addons from `.gitignore` or `addons.lock`, cloned into `.deps/` and linked |
 | `scripts/check.sh` | import, parse pass, suites, the exit-0 stderr check |
 | `scripts/check-export-filter.sh` | fails a repository whose `export_presets.cfg` or `.example.cfg` has a preset `include_filter` without `cfg/*` |
+| `scripts/check-size.py`, `check-frame-hazards.py`, `check-duplication.py` | the efficiency gates (opt-in `efficiency: true`): file/function size, per-frame hazards, duplicated 30-line windows. Each has a baseline at `ci/efficiency/*.tsv` in the checked repository that only shrinks (`--init` once, `--update` lowers and refuses to add); `check-duplication.py --cross <dirs>` is the report-only nightly mode. Shared code in `effgate.py`; tests in `tests/` |
 | `scripts/package.sh` | the release artifact; `--pack` builds the pack zip and `requires.json` |
 | `scripts/package-subpacks.sh` | one pack per map directory |
 | `scripts/server-compat.sh` | refuses a pack the newest released server cannot run |
