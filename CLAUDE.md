@@ -23,6 +23,7 @@ This is not a Godot project. It has no `project.godot`, no `addons/`, and nothin
 | `scripts/fetch-godot.sh` | fetch and verify the pinned runtime |
 | `scripts/resolve-deps.sh` | addons from `.gitignore` or `addons.lock`, cloned into `.deps/` and linked |
 | `scripts/check.sh` | import, parse pass, suites, the exit-0 stderr check |
+| `scripts/check-export-filter.sh` | fails a repository whose `export_presets.cfg` or `.example.cfg` has a preset `include_filter` without `cfg/*` |
 | `scripts/package.sh` | the release artifact; `--pack` builds the pack zip and `requires.json` |
 | `scripts/package-subpacks.sh` | one pack per map directory |
 | `scripts/server-compat.sh` | refuses a pack the newest released server cannot run |

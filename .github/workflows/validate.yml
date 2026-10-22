@@ -119,6 +119,11 @@ jobs:
                   DEPS_TOKEN: ${{ secrets.DEPS_TOKEN }}
               run: dot-ci/scripts/resolve-deps.sh project
 
+            # Before the suites: an export without a cfg filter ships without the
+            # addons' cfg/addons/*.yml, and nothing at runtime says so.
+            - name: Export presets keep cfg/addons
+              run: dot-ci/scripts/check-export-filter.sh project
+
             - name: Import, parse, and run every suite
               if: inputs.godot
               env:
