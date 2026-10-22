@@ -111,9 +111,13 @@ jobs:
             - name: Install the runtime's shared libraries
               if: inputs.godot
               run: |
-                  sudo apt-get update -qq
-                  sudo apt-get install -y -qq --no-install-recommends \
-                      libfontconfig1 libx11-6 libxcursor1 libxinerama1 libxrandr2 libxi6
+                  pkgs="libfontconfig1 libx11-6 libxcursor1 libxinerama1 libxrandr2 libxi6"
+                  missing=""
+                  for p in $pkgs; do dpkg -s "$p" >/dev/null 2>&1 || missing="$missing $p"; done
+                  if [ -n "$missing" ]; then
+                      sudo apt-get update -qq
+                      sudo apt-get install -y -qq --no-install-recommends $missing
+                  fi
 
             - name: Read the pinned runtime version
               if: inputs.godot
