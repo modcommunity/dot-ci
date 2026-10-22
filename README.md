@@ -127,6 +127,10 @@ Opt-in with `hygiene: true` on `validate.yml`; they report and never fail the bu
 - `scripts/check-web-size.py`: `ci/web-budget.tsv` lists `file-or-glob<TAB>max_bytes` for the web build; an absent file is skipped. Baseline `web-size.tsv`.
 - `scripts/duplication-cross.sh [--top N] [dirs]`: the nightly runner's wrapper around `check-duplication.py --cross` over every `~/godot/*/` repository (or the given ones); prints the top clusters and always exits 0.
 
+## Profile check
+
+Opt-in with `profiles: true` on `validate.yml`, after the import. `scripts/check-profiles.sh <project>` runs dot-core's `tools/profile_check.gd` over `cfg/addons/*`, `cfg/game/*` and `cfg/server/*`: unknown keys, wrong types, out-of-range values, NaN and infinity, a missing or cyclic `extends`, duplicate ids, `.yaml` files that are never read and folder profiles with no schema for a child folder. It fails the build with one `path: message` line per problem; a project without `cfg/` or without the tool passes. A project's own kinds are passed with `--schema <script>`.
+
 ## Running the scripts yourself
 
 They take a directory and work the same on a laptop as on a runner:

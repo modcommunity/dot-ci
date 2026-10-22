@@ -53,6 +53,14 @@ on:
                 description: Make a new hygiene violation fail the build.
                 type: boolean
                 default: false
+            profiles:
+                description: >
+                    Check every cfg/ profile yml against its schema (dot-core's
+                    tools/profile_check.gd, after the import). Off by default; fails the
+                    build on an unknown key, wrong type, out-of-range value, bad extends
+                    or duplicate id.
+                type: boolean
+                default: false
             shell-command:
                 description: A command to run instead of, or as well as, the Godot check.
                 type: string
@@ -166,6 +174,10 @@ jobs:
                   SUITES: ${{ inputs.suites }}
                   SUITE_TIMEOUT: ${{ inputs.suite-timeout }}
               run: dot-ci/scripts/check.sh project
+
+            - name: Profile yml against its schemas
+              if: inputs.godot && inputs.profiles
+              run: GODOT="$GODOT" dot-ci/scripts/check-profiles.sh project
 
             # Through the environment rather than interpolated into the run block.
             # The value comes from the caller's own workflow file, so this is not a
