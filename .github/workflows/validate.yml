@@ -61,6 +61,13 @@ on:
                     or duplicate id.
                 type: boolean
                 default: false
+            perf:
+                description: >
+                    Run the perf smoke (scripts/perf-smoke.sh, check mode) against the
+                    budget in ci/perf/smoke.json. Off by default: a repository opts in
+                    once it has recorded one with perf-smoke.sh --init.
+                type: boolean
+                default: false
             shell-command:
                 description: A command to run instead of, or as well as, the Godot check.
                 type: string
@@ -182,6 +189,10 @@ jobs:
             - name: Profile yml against its schemas
               if: inputs.godot && inputs.profiles
               run: GODOT="$GODOT" dot-ci/scripts/check-profiles.sh project
+
+            - name: Perf smoke (load time, frame time, nodes, memory vs budget)
+              if: inputs.godot && inputs.perf
+              run: GODOT="$GODOT" dot-ci/scripts/perf-smoke.sh project
 
             # Through the environment rather than interpolated into the run block.
             # The value comes from the caller's own workflow file, so this is not a
