@@ -11,7 +11,7 @@ A repository here gets a `.github/workflows/` of about twenty lines and no knowl
 3. Push. A failing check names the script and the line.
 4. To release, push a tag such as `v1.2.3`; `release.yml` packages it ([What a release builds](#what-a-release-builds)).
 
-**`@v1` is a floating tag**: it always points at the newest `v1.x.y` (now `v1.3.5`), so a project on `@v1` gets fixes with no edit. Pin `@v1.3.5` for a build that cannot change under you; inputs added later (`pack:`, `bootstrap-link`) name the first version that has them. In a game, the local `./game.sh test` runs the same steps CI does.
+**`@v1` is a floating tag**: it always points at the newest `v1.x.y` (now `v1.3.6`), so a project on `@v1` gets fixes with no edit. Pin `@v1.3.5` for a build that cannot change under you; inputs added later (`pack:`, `bootstrap-link`) name the first version that has them. In a game, the local `./game.sh test` runs the same steps CI does.
 
 ## Calling it
 
