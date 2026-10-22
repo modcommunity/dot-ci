@@ -41,6 +41,18 @@ on:
                     opts in once it has committed its baselines (scripts/check-*.py --init).
                 type: boolean
                 default: false
+            hygiene:
+                description: >
+                    Run the comment lint, generated-file drift and web size budget gates
+                    (scripts/check-comments.py, check-generated.py, check-web-size.py)
+                    against their baselines under ci/efficiency/. Reports only unless
+                    hygiene-blocking is set.
+                type: boolean
+                default: false
+            hygiene-blocking:
+                description: Make a new hygiene violation fail the build.
+                type: boolean
+                default: false
             shell-command:
                 description: A command to run instead of, or as well as, the Godot check.
                 type: string
@@ -137,6 +149,16 @@ jobs:
                   for g in size frame-hazards duplication; do
                       python3 dot-ci/scripts/check-$g.py project || exit 1
                   done
+
+            - name: Hygiene gates (comments, generated files, web size)
+              if: inputs.hygiene
+              continue-on-error: ${{ !inputs.hygiene-blocking }}
+              run: |
+                  rc=0
+                  for g in comments generated web-size; do
+                      python3 dot-ci/scripts/check-$g.py project || rc=1
+                  done
+                  exit $rc
 
             - name: Import, parse, and run every suite
               if: inputs.godot

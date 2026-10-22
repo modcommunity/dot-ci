@@ -131,5 +131,93 @@ class Duplication(unittest.TestCase):
         self.assertIn("1 span repositories", out)
 
 
+COMMENTS = """extends Node
+# one
+# two
+# three
+# four
+var a = 1
+# ---- Section ----
+## A doc line.
+# var x = 5
+# print(x)
+# fixed 2026-10-01, used to crash
+# plain prose about the player
+func f():
+\tpass
+"""
+
+
+class Comments(unittest.TestCase):
+    def test_kinds(self):
+        d = project({"c.gd": COMMENTS})
+        code, out = run("check-comments.py", d)
+        self.assertEqual(code, 1)
+        for k in ("long_block", "banner", "commented_code 2", "history 1"):
+            self.assertIn(k, out)
+        self.assertNotIn("plain prose", out)
+
+    def test_three_lines_is_fine(self):
+        d = project({"c.gd": "# a\n# b\n# c\nvar x = 1\n"})
+        self.assertEqual(run("check-comments.py", d)[0], 0)
+
+    def test_ratchet(self):
+        d = project({"c.gd": COMMENTS})
+        self.assertEqual(run("check-comments.py", "--init", d)[0], 0)
+        self.assertEqual(run("check-comments.py", d)[0], 0)
+        with open(os.path.join(d, "c.gd"), "a") as fh:
+            fh.write("# ====\n")
+        self.assertEqual(run("check-comments.py", d)[0], 1)
+
+
+class Generated(unittest.TestCase):
+    def test_drift(self):
+        d = project({"out.txt": "old\n", "ci/generated.tsv": "out.txt\techo new > out.txt\n"})
+        code, out = run("check-generated.py", d)
+        self.assertEqual(code, 1)
+        self.assertIn("out.txt", out)
+        self.assertEqual(open(os.path.join(d, "out.txt")).read(), "old\n")  # restored
+        self.assertEqual(run("check-generated.py", "--init", d)[0], 0)  # debt is accepted
+        self.assertEqual(run("check-generated.py", d)[0], 0)
+
+    def test_in_sync_and_no_list(self):
+        d = project({"out.txt": "same\n", "ci/generated.tsv": "out.txt\techo same > out.txt\n"})
+        self.assertEqual(run("check-generated.py", d)[0], 0)
+        self.assertEqual(run("check-generated.py", project({"a.gd": ""}))[0], 0)
+
+    def test_failing_generator(self):
+        d = project({"out.txt": "x\n", "ci/generated.tsv": "out.txt\tfalse\n"})
+        self.assertEqual(run("check-generated.py", d)[0], 1)
+
+
+class WebSize(unittest.TestCase):
+    def test_budget(self):
+        d = project({"build/a.wasm": "x" * 100, "build/b.pck": "y" * 10,
+                     "ci/web-budget.tsv": "# f\tmax\nbuild/a.wasm\t50\nbuild/b.pck\t50\nbuild/none\t1\n"})
+        code, out = run("check-web-size.py", d)
+        self.assertEqual(code, 1)
+        self.assertIn("build/a.wasm 100", out)
+        self.assertNotIn("b.pck", out)
+        self.assertEqual(run("check-web-size.py", "--init", d)[0], 0)
+        self.assertEqual(run("check-web-size.py", d)[0], 0)
+        with open(os.path.join(d, "build/a.wasm"), "w") as fh:
+            fh.write("x" * 120)
+        self.assertEqual(run("check-web-size.py", d)[0], 1)
+
+    def test_no_list(self):
+        self.assertEqual(run("check-web-size.py", project({"a.gd": ""}))[0], 0)
+
+
+class CrossWrapper(unittest.TestCase):
+    def test_prints_clusters_and_never_fails(self):
+        a = project({"a.gd": "func f():\n" + BLOCK})
+        b = project({"z.gd": "func f():\n" + BLOCK})
+        r = subprocess.run(["bash", os.path.join(S, "duplication-cross.sh"), "--top", "3", a, b],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("1 span repositories", r.stdout)
+        self.assertIn("lines x2", r.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -118,6 +118,15 @@ A reusable workflow in a private repository can only be called by repositories o
 
 Nothing here is secret. It is YAML and shell; every credential it touches arrives as a secret from the caller, and the repositories it clones stay private.
 
+## Hygiene gates and the nightly scan
+
+Opt-in with `hygiene: true` on `validate.yml`; they report and never fail the build unless `hygiene-blocking: true`. Each has a shrink-only baseline under `ci/efficiency/` made with `--init` and lowered with `--update`, exactly like the efficiency gates, so existing debt never fails and only new violations do.
+
+- `scripts/check-comments.py`: comment blocks over 3 lines, section banners, commented-out code, and history (a date, "found by", "used to"). Baseline `comments.tsv`.
+- `scripts/check-generated.py`: a repository lists `generated-file<TAB>command` in `ci/generated.tsv`; the gate runs each command, diffs the file against the committed copy, and restores it. Baseline `generated.tsv`.
+- `scripts/check-web-size.py`: `ci/web-budget.tsv` lists `file-or-glob<TAB>max_bytes` for the web build; an absent file is skipped. Baseline `web-size.tsv`.
+- `scripts/duplication-cross.sh [--top N] [dirs]`: the nightly runner's wrapper around `check-duplication.py --cross` over every `~/godot/*/` repository (or the given ones); prints the top clusters and always exits 0.
+
 ## Running the scripts yourself
 
 They take a directory and work the same on a laptop as on a runner:
