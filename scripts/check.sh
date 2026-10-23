@@ -169,11 +169,11 @@ for scene in $SUITES; do
     elif [ "$status" -ne 0 ]; then
         printf '  %sFAIL%s %s exited %d\n' "$RED" "$OFF" "$scene" "$status"
         fails=$((fails + 1))
-    elif printf '%s' "$out" | grep -qE 'SCRIPT ERROR|Parse Error'; then
+    elif printf '%s' "$out" | grep -qE 'SCRIPT ERROR|Parse Error|String formatting error'; then
         # EXIT 0 IS NOT A PASS HERE, and this is the check the suites cannot do for
         # themselves.
         #
-        # SCRIPT ERROR and Parse Error only. NOT the engine's own `ERROR: Condition
+        # SCRIPT ERROR, Parse Error and String formatting error (a stray % in a label; the engine prints it without a SCRIPT ERROR) only. NOT the engine's own `ERROR: Condition
         # "..." is true.`, which was in this pattern until dot-game's suite failed on
         # it: that line comes from inside the engine, several of these suites provoke
         # one ON PURPOSE to prove a no-op is a no-op rather than a crash, and failing
