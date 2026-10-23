@@ -162,6 +162,10 @@ jobs:
             - name: Export presets keep cfg/addons
               run: dot-ci/scripts/check-export-filter.sh project
 
+            # A literal * or ? in a cfg file name cannot exist on Windows or in a pack.
+            - name: No * or ? in cfg file names
+              run: dot-ci/scripts/check-cfg-names.sh project
+
             - name: Efficiency gates (baselines only shrink)
               if: inputs.efficiency
               run: |
