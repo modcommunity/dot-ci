@@ -13,7 +13,9 @@
 #   GODOT         the runtime to use (default: godot on PATH)
 #   SUITES        the scenes to run, space separated, relative and without .tscn.
 #                 Empty means auto-detect -- see below.
-#   SUITE_TIMEOUT seconds per suite (default 300)
+#   SUITE_TIMEOUT seconds per suite (default 300). A long suite (a bot soak of
+#                 dozens of rounds can take 15-25 minutes on a slower box) needs
+#                 SUITE_TIMEOUT=1800 locally, or `suite-timeout: 1800` in CI.
 #   PARSE_PER_FILE  set to force the old one-process-per-script parse pass
 #
 # THE TIMEOUT IS LOAD BEARING, NOT TIDINESS. A scene whose script fails to parse

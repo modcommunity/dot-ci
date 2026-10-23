@@ -69,7 +69,7 @@ If you do create it: an organisation secret on the addons' side, and the same to
 | Input | Default | |
 | --- | --- | --- |
 | `suites` | auto-detect | Scenes to run, space separated, relative, without `.tscn`. Set it when a repository's suite is not named the way auto-detection expects. |
-| `suite-timeout` | `300` | Seconds any one suite may take. Past it, the suite has failed. |
+| `suite-timeout` | `300` | Seconds any one suite may take. Past it, the suite has failed. A long suite (a many-round bot run takes 15-25 minutes on a slower box) wants `1800`; locally, `SUITE_TIMEOUT=1800 scripts/check.sh`. |
 | `godot` | `true` | `false` for a repository that is not a Godot project. Those skip the runtime entirely. |
 | `shell-command` | — | A command to run in the checkout, instead of or as well as the Godot check. |
 
