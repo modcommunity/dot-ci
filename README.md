@@ -81,6 +81,8 @@ If you do create it: an organisation secret on the addons' side, and the same to
 
 **A game's maps repository is linked in when the game asks.** A comment line `# bootstrap-link: <repo>/<dir> ci` directly above an ignored path in the game's `.gitignore` makes `resolve-deps.sh` shallow-clone `<repo>` (the games' owner) and link `<dir>` there — the same line `bootstrap.sh` reads on a workstation, which only looks at the third field. The trailing `ci` is an opt-in and the default is off, because one maps repository is 1.8 GB; a link without it is left to the game's suites, which must cope with the directory being absent. Needs `validate.yml@v1.3.0` or later.
 
+**Tracked names must check out on Windows.** `check-windows-names.py` reads `git ls-files` and fails on any of `* ? : " < > |` or a backslash, a component ending in a dot or space, a reserved device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9, with or without extension), or two paths differing only by case. A Windows pull of such a tree fails with "invalid path". Always on; per-map globs are spelled `surf_%.yml`.
+
 **Then every suite runs**, because a clean parse says the files are valid GDScript and nothing whatsoever about whether the thing works.
 
 **Capped with a timeout, which is not tidiness.** A scene whose script fails to parse *hangs* rather than failing: the identifier does not resolve, the scene never loads, and nothing ever reaches `get_tree().quit()`. Uncapped, that is a runner sitting at the six-hour job limit with no output, reported as an infrastructure problem.

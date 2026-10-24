@@ -166,6 +166,10 @@ jobs:
             - name: No * or ? in cfg file names
               run: dot-ci/scripts/check-cfg-names.sh project
 
+            # A tracked name Windows cannot check out fails bootstrap.ps1's pull there.
+            - name: Tracked names check out on Windows
+              run: python3 dot-ci/scripts/check-windows-names.py project
+
             - name: Efficiency gates (baselines only shrink)
               if: inputs.efficiency
               run: |
