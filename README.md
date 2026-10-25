@@ -140,7 +140,7 @@ Opt-in with `hygiene: true` on `validate.yml`; they report and never fail the bu
 
 ## Profile check
 
-Opt-in with `profiles: true` on `validate.yml`, after the import. `scripts/check-profiles.sh <project>` runs dot-core's `tools/profile_check.gd` over `cfg/addons/*`, `cfg/game/*` and `cfg/server/*`: unknown keys, wrong types, out-of-range values, NaN and infinity, a missing or cyclic `extends`, duplicate ids, `.yaml` files that are never read and folder profiles with no schema for a child folder. It fails the build with one `path: message` line per problem; a project without `cfg/` or without the tool passes. A project's own kinds are passed with `--schema <script>`.
+Opt-in with `profiles: true` on `validate.yml`, after the import. `scripts/check-profiles.sh <project>` runs dot-profile's `tools/profile_check.gd` over `cfg/addons/*`, `cfg/game/*` and `cfg/server/*`: unknown keys, wrong types, out-of-range values, NaN and infinity, a missing or cyclic `extends`, duplicate ids, `.yaml` files that are never read and folder profiles with no schema for a child folder. It fails the build with one `path: message` line per problem; a project without `cfg/` or without the tool passes. A project's own kinds are passed with `--schema <script>`.
 
 ## Running the scripts yourself
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Checks every profile yml under a project's cfg/ against its schema (dot-core's profile_check).
+# Checks every profile yml under a project's cfg/ against its schema (dot-profile's profile_check).
 #
 #   GODOT=godot scripts/check-profiles.sh <project-dir> [profile_check args...]
 #
@@ -12,7 +12,7 @@ dir="${1:-.}"
 shift || true
 GODOT="${GODOT:-godot}"
 [ -d "$dir" ] || { printf 'no such directory: %s\n' "$dir" >&2; exit 2; }
-tool=addons/dot_core/tools/profile_check.gd
+tool=addons/dot_profile/tools/profile_check.gd
 if [ ! -d "$dir/cfg" ] || [ ! -f "$dir/$tool" ]; then
     printf 'profiles: nothing to check in %s\n' "$dir"
     exit 0
