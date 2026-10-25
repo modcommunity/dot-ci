@@ -31,6 +31,7 @@ This is not a Godot project. It has no `project.godot`, no `addons/`, and nothin
 | `scripts/efficiency-nightly.sh`, `perf-smoke.sh`, `perf_smoke.gd`, `perf-budget.py` | the nightly report plus trend in one command; the headless perf smoke (load, frame time, nodes, memory vs `ci/perf/smoke.json`, 20% ratchet). [README](README.md#running-the-scripts-yourself) |
 | `scripts/check-comments.py`, `check-generated.py`, `check-web-size.py`, `duplication-cross.sh` | the opt-in `hygiene: true` gates (report-only unless `hygiene-blocking`) with the same shrink-only baselines, and the nightly cross-repository duplication wrapper. [README](README.md#hygiene-gates-and-the-nightly-scan) |
 | `scripts/check-profiles.sh` | opt-in `profiles: true`: runs dot-profile's `profile_check.gd` over a project's `cfg/` profile yml; fails on any schema, `extends` or duplicate-id problem |
+| `scripts/affected.sh [REPO] [--since REV] [--cmds\|--json]` | which sibling repositories link the changed repository and which of their suites (reached by class name or file name through three hops) to run; `parse` when none names the change. Tests in `tests/test_affected.py` |
 | `scripts/package.sh` | the release artifact; `--pack` builds the pack zip and `requires.json` |
 | `scripts/package-subpacks.sh` | one pack per map directory |
 | `scripts/server-compat.sh` | refuses a pack the newest released server cannot run |
