@@ -79,6 +79,7 @@ addon_repo() {
 ## Who owns it. See the note above about why this rule is here and the list is not.
 addon_owner() {
     case "$1" in
+        dot-radio) printf '%s\n' "$GAME_OWNER" ;;
         dot-*) printf '%s\n' "$DOT_OWNER" ;;
         *)     printf '%s\n' "$GAME_OWNER" ;;
     esac
