@@ -241,6 +241,32 @@ class Trend(unittest.TestCase):
         self.assertEqual(self.go(os.path.join(tempfile.mkdtemp(), "h"), "nothing\n")[0], 2)
 
 
+class GateSelfTest(unittest.TestCase):
+    """The done-when: a clean baselined project stays green, then a deliberately added
+    duplicate fails the duplication gate and a per-frame allocation fails the hazard gate."""
+
+    def clean(self):
+        d = project({"a.gd": "extends Node\nfunc _process(delta):\n\tpass\n", "b.gd": "func f():\n" + BLOCK})
+        for s in ("check-duplication.py", "check-frame-hazards.py", "check-size.py"):
+            self.assertEqual(run(s, "--init", d)[0], 0)
+            self.assertEqual(run(s, d)[0], 0)
+        return d
+
+    def test_added_duplicate_fails(self):
+        d = self.clean()
+        with open(os.path.join(d, "dup.gd"), "w") as fh:
+            fh.write("func copy():\n" + BLOCK)
+        self.assertEqual(run("check-duplication.py", d)[0], 1)
+
+    def test_added_per_frame_allocation_fails(self):
+        d = self.clean()
+        with open(os.path.join(d, "a.gd"), "w") as fh:
+            fh.write("extends Node\nfunc _process(delta):\n\tvar tmp = []\n\tvar n = get_node(\"X\")\n")
+        code, out = run("check-frame-hazards.py", d)
+        self.assertEqual(code, 1)
+        self.assertIn("alloc_array", out)
+
+
 class PerfBudget(unittest.TestCase):
     RES = '{"scene":"res://m.tscn","load_ms":1000,"frame_ms":2,"nodes":%d,"mem_mb":100}'
 
