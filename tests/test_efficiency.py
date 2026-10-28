@@ -170,6 +170,26 @@ class Comments(unittest.TestCase):
         self.assertEqual(run("check-comments.py", d)[0], 1)
 
 
+class Logging(unittest.TestCase):
+    BAD = 'const CHANNEL := "x"\nfunc f():\n\tpush_warning("w")\n'
+    GOOD = 'const CHANNEL := "x"\nfunc f():\n\tDotLog.info(CHANNEL, "ok")\n\t# push_warning("no")\n'
+
+    def test_bad_fails_and_clean_passes(self):
+        code, out = run("check-logging.py", project({"a.gd": self.BAD}))
+        self.assertEqual(code, 1)
+        self.assertIn("channel_silent", out)
+        self.assertIn("push_warning", out)
+        self.assertEqual(run("check-logging.py", project({"a.gd": self.GOOD}))[0], 0)
+
+    def test_ratchet(self):
+        d = project({"a.gd": self.BAD})
+        self.assertEqual(run("check-logging.py", "--init", d)[0], 0)
+        self.assertEqual(run("check-logging.py", d)[0], 0)
+        with open(os.path.join(d, "a.gd"), "a") as fh:
+            fh.write("\tpush_warning(\"again\")\n")
+        self.assertEqual(run("check-logging.py", d)[0], 1)
+
+
 class Generated(unittest.TestCase):
     def test_drift(self):
         d = project({"out.txt": "old\n", "ci/generated.tsv": "out.txt\techo new > out.txt\n"})
