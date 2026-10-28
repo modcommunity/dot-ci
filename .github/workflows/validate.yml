@@ -177,12 +177,12 @@ jobs:
                       python3 dot-ci/scripts/check-$g.py project || exit 1
                   done
 
-            - name: Hygiene gates (comments, generated files, web size, logging)
+            - name: Hygiene gates (comments, generated files, web size, logging, markdown wrap, suite checks)
               if: inputs.hygiene
               continue-on-error: ${{ !inputs.hygiene-blocking }}
               run: |
                   rc=0
-                  for g in comments generated web-size logging; do
+                  for g in comments generated web-size logging markdown-wrap suite-checks; do
                       python3 dot-ci/scripts/check-$g.py project || rc=1
                   done
                   exit $rc

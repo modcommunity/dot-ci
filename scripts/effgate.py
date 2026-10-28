@@ -18,10 +18,14 @@ SKIP_DIRS = {".git", ".godot", ".deps", "addons", ".import", "node_modules"}
 
 
 def gd_files(root):
-    """Tracked .gd files, relative to root. git ls-files when it is a repository (linked
+    return files_with(root, ".gd")
+
+
+def files_with(root, ext):
+    """Tracked files ending in ext, relative to root. git ls-files when it is a repository (linked
     addons and caches are not tracked, which is what we want), else a walk that skips them."""
     if os.path.exists(os.path.join(root, ".git")):
-        r = subprocess.run(["git", "-C", root, "ls-files", "-z", "--", "*.gd"],
+        r = subprocess.run(["git", "-C", root, "ls-files", "-z", "--", "*" + ext],
                            capture_output=True, text=True)
         if r.returncode == 0:
             return sorted(p for p in r.stdout.split("\0") if p and os.path.isfile(os.path.join(root, p)))
@@ -29,7 +33,7 @@ def gd_files(root):
     for d, dirs, files in os.walk(root):
         dirs[:] = [x for x in dirs if x not in SKIP_DIRS]
         for f in files:
-            if f.endswith(".gd"):
+            if f.endswith(ext):
                 out.append(os.path.relpath(os.path.join(d, f), root))
     return sorted(out)
 

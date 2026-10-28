@@ -190,6 +190,51 @@ class Logging(unittest.TestCase):
         self.assertEqual(run("check-logging.py", d)[0], 1)
 
 
+class MarkdownWrap(unittest.TestCase):
+    BAD = "# T\n\nfirst line of a paragraph\nsecond line of it\n\nok single line\n"
+    GOOD = ("---\na: b\nc: d\n---\n# T\n\none line\n\n- item one\n  continues\n- item two\n\n"
+            "| a | b |\n| - | - |\n\n```\ncode one\ncode two\n```\n")
+
+    def test_bad_fails_and_clean_passes(self):
+        code, out = run("check-markdown-wrap.py", project({"a.md": self.BAD}))
+        self.assertEqual(code, 1)
+        self.assertIn("a.md::hard_wrap 1", out)
+        self.assertEqual(run("check-markdown-wrap.py", project({"a.md": self.GOOD}))[0], 0)
+
+    def test_ratchet(self):
+        d = project({"a.md": self.BAD})
+        self.assertEqual(run("check-markdown-wrap.py", "--init", d)[0], 0)
+        self.assertEqual(run("check-markdown-wrap.py", d)[0], 0)
+        with open(os.path.join(d, "a.md"), "a") as fh:
+            fh.write("\nanother\nwrapped one\n")
+        self.assertEqual(run("check-markdown-wrap.py", d)[0], 1)
+
+
+class SuiteChecks(unittest.TestCase):
+    SUITE = "const CHECKS := 10\nfunc _ready():\n\t_report(CHECKS + 1)\n"
+
+    def tree(self, total):
+        return project({"examples/s.gd": self.SUITE,
+                        ".godot/test-logs/s.log": "ok\n\n%d passed, 0 failed\n" % total})
+
+    def test_drift_fails_and_match_passes(self):
+        code, out = run("check-suite-checks.py", self.tree(13))
+        self.assertEqual(code, 1)
+        self.assertIn("s.gd::checks_drift 2", out)
+        self.assertEqual(run("check-suite-checks.py", self.tree(11))[0], 0)
+
+    def test_no_log_is_skipped(self):
+        self.assertEqual(run("check-suite-checks.py", project({"examples/s.gd": self.SUITE}))[0], 0)
+
+    def test_ratchet(self):
+        d = self.tree(13)
+        self.assertEqual(run("check-suite-checks.py", "--init", d)[0], 0)
+        self.assertEqual(run("check-suite-checks.py", d)[0], 0)
+        with open(os.path.join(d, ".godot/test-logs/s.log"), "a") as fh:
+            fh.write("20 passed, 0 failed\n")
+        self.assertEqual(run("check-suite-checks.py", d)[0], 1)
+
+
 class Generated(unittest.TestCase):
     def test_drift(self):
         d = project({"out.txt": "old\n", "ci/generated.tsv": "out.txt\techo new > out.txt\n"})

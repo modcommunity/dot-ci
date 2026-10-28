@@ -135,6 +135,8 @@ Opt-in with `hygiene: true` on `validate.yml`; they report and never fail the bu
 
 - `scripts/check-comments.py`: comment blocks over 3 lines, section banners, commented-out code, and history (a date, "found by", "used to"). Baseline `comments.tsv`.
 - `scripts/check-logging.py`: a `const CHANNEL` in a file that never calls `DotLog.`, and `push_warning` calls. Baseline `logging.tsv`.
+- `scripts/check-markdown-wrap.py`: a paragraph hard-wrapped over several lines in a `.md` (fences, front matter, lists, tables, quotes and indented code are skipped). Baseline `markdown-wrap.tsv`.
+- `scripts/check-suite-checks.py`: a suite's `const CHECKS` (plus the offset in `_report(CHECKS + k)`) that differs from the total in `.godot/test-logs/<suite>.log`; a suite with no log is skipped, because the count is not knowable statically. Baseline `suite-checks.tsv`.
 - `scripts/check-generated.py`: a repository lists `generated-file<TAB>command` in `ci/generated.tsv`; the gate runs each command, diffs the file against the committed copy, and restores it. Baseline `generated.tsv`.
 - `scripts/check-web-size.py`: `ci/web-budget.tsv` lists `file-or-glob<TAB>max_bytes` for the web build; an absent file is skipped. Baseline `web-size.tsv`.
 - `scripts/duplication-cross.sh [--top N] [dirs]`: the nightly runner's wrapper around `check-duplication.py --cross` over every `~/godot/*/` repository (or the given ones); prints the top clusters and always exits 0.
