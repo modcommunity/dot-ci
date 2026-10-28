@@ -20,8 +20,14 @@ import effgate
 
 CONST_RE = re.compile(r"^\s*const\s+([A-Za-z_]\w*)\s*(?::\s*int\s*=|:=|=)\s*(.+?)\s*(?:#.*)?$")
 TOTAL = re.compile(r"(\d+) (?:passed|checks), (\d+) failed")
+def tdiv(a, b):
+    """Integer division truncating toward zero, as GDScript does (Python's // floors)."""
+    q = abs(a) // abs(b)
+    return q if (a < 0) == (b < 0) else -q
+
+
 OPS = {ast.Add: lambda a, b: a + b, ast.Sub: lambda a, b: a - b, ast.Mult: lambda a, b: a * b,
-       ast.Div: lambda a, b: a // b, ast.FloorDiv: lambda a, b: a // b}
+       ast.Div: lambda a, b: tdiv(a, b), ast.FloorDiv: lambda a, b: tdiv(a, b)}
 
 
 def evaluate(expr, consts, depth=0):
@@ -29,6 +35,9 @@ def evaluate(expr, consts, depth=0):
     try:
         tree = ast.parse(expr.strip(), mode="eval").body
     except SyntaxError:
+        return None
+    except (RecursionError, ValueError, MemoryError):
+        print("check-suite-checks: skipped an unparsable constant expression", file=sys.stderr)
         return None
 
     def ev(n, depth):
@@ -48,7 +57,11 @@ def evaluate(expr, consts, depth=0):
             return OPS[type(n.op)](l, r)
         return None
 
-    return ev(tree, depth)
+    try:
+        return ev(tree, depth)
+    except RecursionError:
+        print("check-suite-checks: skipped a too deeply nested constant expression", file=sys.stderr)
+        return None
 
 
 def call_args(line, start):

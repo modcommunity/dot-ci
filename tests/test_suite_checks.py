@@ -57,6 +57,24 @@ class SuiteChecks(unittest.TestCase):
     def test_no_eval_of_code(self):
         self.assertEqual(run("const CHECKS := __import__('os').getpid()\n", 1), {})
 
+    def test_negative_division_truncates(self):
+        self.assertEqual(sc.evaluate("-7 / 2", {}), -3)
+        self.assertEqual(sc.evaluate("7 / -2", {}), -3)
+        self.assertEqual(sc.evaluate("-7 / -2", {}), 3)
+        self.assertEqual(sc.evaluate("7 / 2", {}), 3)
+        self.assertEqual(run("const CHECKS := -7 / 2 + 13\n", 10), {})
+
+    def test_division_by_zero_skipped(self):
+        self.assertEqual(sc.evaluate("5 / 0", {}), None)
+
+    def test_deep_nesting_does_not_crash(self):
+        self.assertIsNone(sc.evaluate("(" * 5000 + "1" + ")" * 5000, {}))
+        self.assertEqual(run("const CHECKS := " + "-" * 5000 + "1\n", 99), {})
+
+    def test_nul_byte_does_not_crash(self):
+        self.assertIsNone(sc.evaluate("1 +\x00 2", {}))
+        self.assertEqual(run("const CHECKS := 1 +\x00 2\n", 99), {})
+
     def test_stale_log_is_not_a_violation(self):
         self.assertEqual(run("const CHECKS := 389\n", 392, log_newer=False), {})
 
