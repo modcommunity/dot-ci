@@ -170,6 +170,10 @@ jobs:
             - name: Tracked names check out on Windows
               run: python3 dot-ci/scripts/check-windows-names.py project
 
+            # A requires.floor.json lower than a newer addon class the code names unguarded.
+            - name: Floors cover the addon levels the code uses
+              run: python3 dot-ci/scripts/check-floor-uses.py project
+
             - name: Efficiency gates (baselines only shrink)
               if: inputs.efficiency
               run: |
