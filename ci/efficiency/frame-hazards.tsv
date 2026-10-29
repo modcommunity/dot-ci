@@ -1,0 +1,3 @@
+# frame-hazards
+# Baselines only shrink: scripts/<gate> --update lowers or drops entries and refuses to add.
+scripts/perf_smoke.gd::_process::alloc_dict	1
