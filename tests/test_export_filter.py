@@ -30,6 +30,11 @@ class ExportFilter(unittest.TestCase):
     def test_deliberate_exclude_is_a_note(self):
         code, out = check(("addons.lock, cfg/addons/*", "tools/*, cfg/*"))
         self.assertEqual(code, 0)
+        self.assertIn("WARN", out)
+
+    def test_exclude_without_include_is_a_note(self):
+        code, out = check(("addons.lock", "tools/*, cfg/*"))
+        self.assertEqual(code, 0)
         self.assertIn("note", out)
 
     def test_exclude_does_not_excuse_other_preset(self):
