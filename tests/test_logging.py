@@ -49,6 +49,18 @@ class Logging(unittest.TestCase):
     def test_allow_marker(self):
         self.assertEqual(run({"o.gd": "func f():\n\tpush_warning(x) # check-logging: allow push_warning\n"}), {})
 
+    def test_runtime_print_counts(self):
+        self.assertEqual(run({"o.gd": "func f():\n\tprint('x')\n\tprint_rich('y')\n"}), {"o.gd::print": 2})
+
+    def test_print_exempt_places(self):
+        r = run({"examples/a.gd": "func f():\n\tprint('x')\n", "tools/b.gd": "func f():\n\tprint('x')\n",
+                 "cli.gd": "extends SceneTree\nfunc f():\n\tprint('x')\n",
+                 "m.gd": "func f():\n\tprint('x') # check-logging: allow print\n"})
+        self.assertEqual(r, {})
+
+    def test_print_not_method_or_word(self):
+        self.assertEqual(run({"o.gd": "func f():\n\tx.print('a')\n\tpretty_print('a')\n\t# print('c')\n\tvar s = \"print(x)\"\n"}), {})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,10 +3,11 @@
 
     scripts/check-logging.py [--update|--init] [--baseline F] <project-dir>
 
-Kinds: channel_silent (a file declares `const CHANNEL` and never calls `DotLog.`),
+Kinds: print (print/print_rich in runtime code; examples/, tools/, qa/, editor/, tests and SceneTree/MainLoop scripts are program output and exempt),
+channel_silent (a file declares `const CHANNEL` and never calls `DotLog.`),
 push_warning (any call; it staples an unsuppressible backtrace on a runtime condition).
 A base that declares CHANNEL counts a DotLog use in any subclass (extends by path or class_name).
-DotLog's own file and lines marked `# check-logging: allow push_warning` are exempt.
+DotLog's own file and lines marked `# check-logging: allow push_warning` / `allow print` are exempt.
 Key `path::kind`, count = sites. Baseline: ci/efficiency/logging.tsv.
 """
 import os
@@ -20,6 +21,10 @@ WARN = re.compile(r"\bpush_warning\s*\(")
 
 
 ALLOW = "check-logging: allow push_warning"
+ALLOW_PRINT = "check-logging: allow print"
+PRINT = re.compile(r"(?<![\w.])print(_rich)?\s*\(")
+OUTPUT_DIRS = ("examples/", "tools/", "test/", "tests/", "addons/gut/")
+MAIN_LOOP = re.compile(r"^\s*extends\s+(SceneTree|MainLoop)\b")
 CLASS_NAME = re.compile(r"^\s*class_name\s+(\w+)")
 EXTENDS_PATH = re.compile(r"""^\s*extends\s+["']([^"']+)["']""")
 EXTENDS_CLASS = re.compile(r"^\s*extends\s+([A-Za-z_]\w*)")
@@ -71,6 +76,12 @@ def measure(root):
         n = sum(1 for l, r in zip(lines, raw[rel]) if WARN.search(l) and ALLOW not in r)
         if n and not own:
             cur[rel + "::push_warning"] = n
+        if not rel.startswith(OUTPUT_DIRS) and "/examples/" not in rel and "/tools/" not in rel \
+                and "/qa/" not in rel and "/editor/" not in rel \
+                and not any(MAIN_LOOP.match(l) for l in lines):
+            n = sum(1 for l, r in zip(lines, raw[rel]) if PRINT.search(l) and ALLOW_PRINT not in r)
+            if n and not own:
+                cur[rel + "::print"] = n
     return cur
 
 
