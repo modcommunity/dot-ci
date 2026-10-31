@@ -39,9 +39,9 @@ on:
             pack:
                 description: >-
                     Also attach <name>-<version>-pack.zip, the imported tree website-city
-                    publishes as this game's signed pack. For a game; an addon's zip is
-                    already that. Imports the project first, so it needs DEPS_TOKEN when
-                    the project declares addons.
+                    publishes as this game's signed pack. For a game, or an addon-shaped
+                    Workshop pack (its addons/ stays out). Imports the project first, so
+                    it needs DEPS_TOKEN when the project declares addons.
                 type: boolean
                 default: false
             pack-exclude-dirs:

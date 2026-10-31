@@ -23,7 +23,8 @@
 #   scripts, and the private half of that key exists in one place on purpose. Sixty
 #   repositories each holding a copy of it would be sixty ways to lose it.
 #
-#   With --pack, a game ALSO ships <name>-<version>-pack.zip: the tree the publisher
+#   With --pack, a game (or an addon repository that is also a Workshop pack: provides.json
+#   at its root; its own addons/ stays out of the pack) ALSO ships <name>-<version>-pack.zip: the tree the publisher
 #   turns into that signed pack. The tarball cannot be it, and not for want of a
 #   format -- it has no addons (they are gitignored links) and no .godot/imported, and
 #   a mounted pack is never re-imported, so every texture and model in it would fail
@@ -161,97 +162,97 @@ if [ "${#artifacts[@]}" -eq 0 ]; then
     git archive --format=tar.gz --prefix="${NAME}-${VERSION}/" -o "$tar_path" HEAD || exit 1
     artifacts+=("$tar_path")
     printf 'packed the tracked tree -> %s\n' "$(basename "$tar_path")" >&2
+fi
 
-    if [ "$PACK" -eq 1 ]; then
-        [ -d "$PROJECT/.godot/imported" ] || {
-            printf '%s has not been imported: --pack needs `godot --headless --import` first\n' "$NAME" >&2
-            exit 2
-        }
+# An addon repository takes --pack too: its zip is the install, the pack is the data it
+# publishes to the Workshop (provides.json, weapons/, cfg/). addons/ is left out of the pack
+# either way: the host owns the dot-* addons and the Workshop pack is data only.
+if [ "$PACK" -eq 1 ]; then
+    [ -d "$PROJECT/.godot/imported" ] || {
+        printf '%s has not been imported: --pack needs `godot --headless --import` first\n' "$NAME" >&2
+        exit 2
+    }
 
-        PACK_DIR="$STAGE/pack"
-        mkdir -p "$PACK_DIR" || exit 1
-        git archive --format=tar HEAD | tar -x -C "$PACK_DIR" || exit 1
+    PACK_DIR="$STAGE/pack"
+    mkdir -p "$PACK_DIR" || exit 1
+    git archive --format=tar HEAD | tar -x -C "$PACK_DIR" || exit 1
 
-        for d in "${EXCLUDE_DIRS[@]}"; do
-            find "$PACK_DIR" -depth -type d -name "$d" -exec rm -rf {} + || exit 1
-        done
-        # A script's .uid sidecar is editor bookkeeping; DotCloudPublisher leaves it out
-        # too, and the two publishers should produce the same pack from the same tree.
-        find "$PACK_DIR" -name '*.gd.uid' -type f -delete || exit 1
-        find "$PACK_DIR" -name '*.md' -type f -delete || exit 1
+    for d in "${EXCLUDE_DIRS[@]}"; do
+        find "$PACK_DIR" -depth -type d -name "$d" -exec rm -rf {} + || exit 1
+    done
+    # A script's .uid sidecar is editor bookkeeping; DotCloudPublisher leaves it out
+    # too, and the two publishers should produce the same pack from the same tree.
+    find "$PACK_DIR" -name '*.gd.uid' -type f -delete || exit 1
+    find "$PACK_DIR" -name '*.md' -type f -delete || exit 1
 
-        # The imported outputs, chosen by the .import files that SURVIVED the
-        # exclusions rather than by copying .godot/imported whole. That directory holds
-        # the output of every asset in the checkout, examples and screenshots included,
-        # and one game's excluded map folder is most of its bytes.
-        # Under _imported/, NOT at .godot/imported/ where they live in the project,
-        # with every marker rewritten to match. A web export cannot read the engine's
-        # own reserved directory back out of a mounted pack -- "A required file is not
-        # readable after mounting" -- while Linux reads it fine, so a headless check
-        # passes on the platform that does not matter. DotCloudPublisher.IMPORTED_DIR
-        # is the same name for the same reason; a marker names its output by absolute
-        # path, so the directory can be anything the marker agrees with.
-        IMPORTED_DIR="_imported"
-        imported=0
-        missing=0
-        while IFS= read -r -d '' marker; do
-            while IFS= read -r res; do
-                rel="${res#res://}"
-                if [ -f "$PROJECT/$rel" ]; then
-                    mkdir -p "$PACK_DIR/$IMPORTED_DIR" || exit 1
-                    cp "$PROJECT/$rel" "$PACK_DIR/$IMPORTED_DIR/${rel#.godot/imported/}" || exit 1
-                    imported=$((imported + 1))
-                else
-                    # A marker naming an output the import did not write is an asset
-                    # that will not load from the pack. Said here, where it can be
-                    # fixed, instead of on a player's machine where it cannot.
-                    printf 'missing imported output: %s (from %s)\n' "$rel" "${marker#"$PACK_DIR"/}" >&2
-                    missing=$((missing + 1))
-                fi
-            done < <(grep -o 'res://\.godot/imported/[^"]*' "$marker" | sort -u)
-            sed -i 's|res://\.godot/imported/|res://'"$IMPORTED_DIR"'/|g' "$marker" || exit 1
-        done < <(find "$PACK_DIR" -name '*.import' -type f -print0)
-
-        [ "$missing" -eq 0 ] || { printf '%d imported outputs are missing; re-import and try again\n' "$missing" >&2; exit 1; }
-
-        # What the pack needs of the host's addons, as requires.json at its root. A pack's
-        # scripts compile against the addons of whatever mounts it, so one built against a
-        # newer dot-net than a player's client has fails to PARSE there, mid-load, with
-        # nothing a person can read; dot-cloud reads this file before mounting and says it
-        # in a sentence instead (see dot-core's DotAddonApi). Derived from the game's own
-        # files at the levels THIS checkout's addons have -- "built against" -- so nobody
-        # keeps the list. A game that commits its own keeps control of it, and it is
-        # audited here instead: an addon used and not declared, or declared above what
-        # this build has, fails the release rather than a player's join.
-        REQ_TOOL="res://addons/dot_core/tools/dot_requires.gd"
-        if [ -f "$PROJECT/addons/dot_core/tools/dot_requires.gd" ]; then
-            if [ -f "$PACK_DIR/requires.json" ]; then
-                "${GODOT:-godot}" --headless --path "$PROJECT" --script "$REQ_TOOL" -- --check requires.json >&2 \
-                    || { printf '%s/requires.json does not cover what the game uses\n' "$NAME" >&2; exit 1; }
+    # The imported outputs, chosen by the .import files that SURVIVED the
+    # exclusions rather than by copying .godot/imported whole. That directory holds
+    # the output of every asset in the checkout, examples and screenshots included,
+    # and one game's excluded map folder is most of its bytes.
+    # Under _imported/, NOT at .godot/imported/ where they live in the project,
+    # with every marker rewritten to match. A web export cannot read the engine's
+    # own reserved directory back out of a mounted pack -- "A required file is not
+    # readable after mounting" -- while Linux reads it fine, so a headless check
+    # passes on the platform that does not matter. DotCloudPublisher.IMPORTED_DIR
+    # is the same name for the same reason; a marker names its output by absolute
+    # path, so the directory can be anything the marker agrees with.
+    IMPORTED_DIR="_imported"
+    imported=0
+    missing=0
+    while IFS= read -r -d '' marker; do
+        while IFS= read -r res; do
+            rel="${res#res://}"
+            if [ -f "$PROJECT/$rel" ]; then
+                mkdir -p "$PACK_DIR/$IMPORTED_DIR" || exit 1
+                cp "$PROJECT/$rel" "$PACK_DIR/$IMPORTED_DIR/${rel#.godot/imported/}" || exit 1
+                imported=$((imported + 1))
             else
-                "${GODOT:-godot}" --headless --path "$PROJECT" --script "$REQ_TOOL" -- --out "$PACK_DIR/requires.json" >&2 \
-                    || { printf 'could not derive requires.json for %s\n' "$NAME" >&2; exit 1; }
-                [ -s "$PACK_DIR/requires.json" ] \
-                    || { printf 'requires.json for %s came out empty\n' "$NAME" >&2; exit 1; }
+                # A marker naming an output the import did not write is an asset
+                # that will not load from the pack. Said here, where it can be
+                # fixed, instead of on a player's machine where it cannot.
+                printf 'missing imported output: %s (from %s)\n' "$rel" "${marker#"$PACK_DIR"/}" >&2
+                missing=$((missing + 1))
             fi
-        else
-            # A dot-core pinned from before the tool existed. Said, not failed: the pack is
-            # exactly what it was the day before, and a host checks nothing it is not given.
-            printf 'note: dot-core has no dot_requires.gd; %s ships without requires.json\n' "$NAME" >&2
-        fi
+        done < <(grep -o 'res://\.godot/imported/[^"]*' "$marker" | sort -u)
+        sed -i 's|res://\.godot/imported/|res://'"$IMPORTED_DIR"'/|g' "$marker" || exit 1
+    done < <(find "$PACK_DIR" -name '*.import' -type f -print0)
 
-        pack_path="$OUT/${NAME}-${VERSION}-pack.zip"
-        rm -f "$pack_path"
-        # Entries at the top level, not under a wrapper directory: the publisher strips
-        # a common root anyway, and a pack whose files sit one level down mounts where
-        # no reference resolves.
-        ( cd "$PACK_DIR" && zip -q -r -y "$pack_path" . ) || exit 1
-        artifacts+=("$pack_path")
-        printf 'packed the game with %d imported outputs -> %s\n' "$imported" "$(basename "$pack_path")" >&2
+    [ "$missing" -eq 0 ] || { printf '%d imported outputs are missing; re-import and try again\n' "$missing" >&2; exit 1; }
+
+    # What the pack needs of the host's addons, as requires.json at its root. A pack's
+    # scripts compile against the addons of whatever mounts it, so one built against a
+    # newer dot-net than a player's client has fails to PARSE there, mid-load, with
+    # nothing a person can read; dot-cloud reads this file before mounting and says it
+    # in a sentence instead (see dot-core's DotAddonApi). Derived from the game's own
+    # files at the levels THIS checkout's addons have -- "built against" -- so nobody
+    # keeps the list. A game that commits its own keeps control of it, and it is
+    # audited here instead: an addon used and not declared, or declared above what
+    # this build has, fails the release rather than a player's join.
+    REQ_TOOL="res://addons/dot_core/tools/dot_requires.gd"
+    if [ -f "$PROJECT/addons/dot_core/tools/dot_requires.gd" ]; then
+        if [ -f "$PACK_DIR/requires.json" ]; then
+            "${GODOT:-godot}" --headless --path "$PROJECT" --script "$REQ_TOOL" -- --check requires.json >&2 \
+                || { printf '%s/requires.json does not cover what the game uses\n' "$NAME" >&2; exit 1; }
+        else
+            "${GODOT:-godot}" --headless --path "$PROJECT" --script "$REQ_TOOL" -- --out "$PACK_DIR/requires.json" >&2 \
+                || { printf 'could not derive requires.json for %s\n' "$NAME" >&2; exit 1; }
+            [ -s "$PACK_DIR/requires.json" ] \
+                || { printf 'requires.json for %s came out empty\n' "$NAME" >&2; exit 1; }
+        fi
+    else
+        # A dot-core pinned from before the tool existed. Said, not failed: the pack is
+        # exactly what it was the day before, and a host checks nothing it is not given.
+        printf 'note: dot-core has no dot_requires.gd; %s ships without requires.json\n' "$NAME" >&2
     fi
-elif [ "$PACK" -eq 1 ]; then
-    # An addon's zip is already the thing a pack is made from.
-    printf 'note: --pack ignored for an addon repository\n' >&2
+
+    pack_path="$OUT/${NAME}-${VERSION}-pack.zip"
+    rm -f "$pack_path"
+    # Entries at the top level, not under a wrapper directory: the publisher strips
+    # a common root anyway, and a pack whose files sit one level down mounts where
+    # no reference resolves.
+    ( cd "$PACK_DIR" && zip -q -r -y "$pack_path" . ) || exit 1
+    artifacts+=("$pack_path")
+    printf 'packed the game with %d imported outputs -> %s\n' "$imported" "$(basename "$pack_path")" >&2
 fi
 
 # A digest beside each artifact. The release page is not the only thing that consumes
