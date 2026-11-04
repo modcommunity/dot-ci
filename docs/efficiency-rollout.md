@@ -9,6 +9,8 @@ The gates (size, frame hazards, duplication, perf smoke) are opt-in per caller a
 3. In each caller that has committed baselines, add `efficiency: true` (and `perf: true` for a game with `ci/perf/smoke.json`) under `with:` in `.github/workflows/ci.yml`, then push.
 4. Watch the first run per caller. A failure on the first run means the baseline is stale: re-run the gate with `--update` locally (it only ever lowers entries), never edit the `.tsv` by hand.
 
+`scripts/rollout-caller.sh <repo-dir>` does the baselines and the `ci.yml` flags for one repo in a single local commit (never pushes; run it through `heavy --` for a game, its perf smoke runs Godot). Push its commit only after step 2.
+
 Baselines are made once with `scripts/check-size.py --init`, `scripts/check-frame-hazards.py --init`, `scripts/check-duplication.py --init` and `scripts/perf-smoke.sh --init <project>`, each refusing to overwrite.
 
 ## Nightly report
