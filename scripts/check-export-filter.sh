@@ -14,6 +14,9 @@
 # exclude_filter naming cfg/ is a deliberate "ships no cfg" (it beats the include): a note,
 # not a failure, but a WARN when the include also names cfg, since that include then ships
 # nothing. No include and no such exclude still fails.
+# A Web preset (platform="Web") must also name `*.html` in its include_filter: the export
+# ships the page the browser loads (the shell and the pages beside the pck), and an
+# include_filter without it drops them. This applies even when cfg/ is deliberately excluded.
 set -uo pipefail
 dir="${1:-.}"
 [ -d "$dir" ] || { printf 'no such directory: %s\n' "$dir" >&2; exit 2; }
@@ -22,6 +25,10 @@ bad=0
 # because exclude_filter follows include_filter and an exclude beats an include.
 judge() {
     [ -n "${preset:-}" ] && [ -n "${have_inc:-}" ] || return 0
+    if [ "${plat:-}" = Web ] && ! grep -Eq '\*\.html' <<<"$inc"; then
+        printf 'FAIL %s %s %s: Web preset include_filter lacks *.html (the page the browser loads is dropped from the export)\n' "$f" "$preset" "${pname:-}" >&2
+        bad=1
+    fi
     if grep -Eq 'cfg/\*|cfg/addons/\*' <<<"$exc"; then
         if grep -Eq 'cfg/\*|cfg/addons/\*|\*\.yml' <<<"$inc"; then
             printf 'WARN %s %s %s: exclude_filter covers cfg/* and beats the include_filter, so cfg/addons/*.yml is not shipped; narrow the exclude or drop the include\n' "$f" "$preset" "${pname:-}" >&2
@@ -35,11 +42,12 @@ judge() {
 }
 for f in "$dir/export_presets.cfg" "$dir/export_presets.example.cfg"; do
     [ -f "$f" ] || continue
-    preset="" have_inc="" inc="" exc="" pname=""
+    preset="" have_inc="" inc="" exc="" pname="" plat=""
     while IFS= read -r line; do
         case "$line" in
             "[preset."*".options]") ;;
-            "[preset."*"]") judge; preset="$line" have_inc="" inc="" exc="" pname="" ;;
+            "[preset."*"]") judge; preset="$line" have_inc="" inc="" exc="" pname="" plat="" ;;
+            platform=*) plat="${line#platform=}"; plat="${plat//\"/}" ;;
             name=*) pname="${line#name=}" ;;
             include_filter=*) inc="$line" have_inc=1 ;;
             exclude_filter=*) exc="$line" ;;
