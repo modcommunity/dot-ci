@@ -7,11 +7,11 @@ import unittest
 SCRIPT = os.path.join(os.path.dirname(__file__), "..", "scripts", "check-export-filter.sh")
 
 
-def check(*presets):
+def check(*presets, platform=None):
     d = tempfile.mkdtemp()
     body = ""
     for i, (inc, exc) in enumerate(presets):
-        body += '[preset.%d]\n\nname="P%d"\ninclude_filter="%s"\nexclude_filter="%s"\n\n[preset.%d.options]\n\nx=1\n\n' % (i, i, inc, exc, i)
+        body += '[preset.%d]\n\nname="P%d"\n%sinclude_filter="%s"\nexclude_filter="%s"\n\n[preset.%d.options]\n\nx=1\n\n' % (i, i, 'platform="%s"\n' % platform if platform else "", inc, exc, i)
     with open(os.path.join(d, "export_presets.cfg"), "w") as fh:
         fh.write(body)
     r = subprocess.run(["bash", SCRIPT, d], capture_output=True, text=True)
@@ -39,6 +39,17 @@ class ExportFilter(unittest.TestCase):
 
     def test_exclude_does_not_excuse_other_preset(self):
         self.assertEqual(check(("cfg/*", "cfg/*"), ("", "tools/*"))[0], 1)
+
+    def test_web_preset_needs_html(self):
+        code, out = check(("cfg/*", "tools/*"), platform="Web")
+        self.assertEqual(code, 1)
+        self.assertIn("*.html", out)
+
+    def test_web_preset_with_html_passes(self):
+        self.assertEqual(check(("cfg/*, *.html", "tools/*"), platform="Web")[0], 0)
+
+    def test_non_web_preset_needs_no_html(self):
+        self.assertEqual(check(("cfg/*", "tools/*"), platform="Linux")[0], 0)
 
 
 if __name__ == "__main__":
