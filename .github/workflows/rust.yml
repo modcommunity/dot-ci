@@ -1,0 +1,277 @@
+# A native GDExtension written in Rust (dot-sim): lint, test, the parity suite with the library
+# loaded, and on a tag the per-platform libraries as release-asset zips.
+#
+# The Godot side without the library is validate.yml's job, called beside this one: every
+# native module has a script twin, so a checkout with no library is a supported state and
+# is checked as one. This workflow adds the half that needs the library.
+#
+# WHAT IT DOES NOT DO: build for the web, touch the content CDN, or change anything a web
+# export contains. The libraries are never committed and never enter a web export (the
+# plain web template refuses to start a project that lists one), so check-web-size sees
+# nothing new. A release carries the zips like any other asset; the site's release sync
+# is what moves release assets to storage, as it does for every other repository.
+name: Rust
+
+on:
+    workflow_call:
+        inputs:
+            workspace:
+                description: The Cargo workspace directory, relative to the repository root.
+                type: string
+                default: rust
+            package:
+                description: The cdylib crate the libraries are built from.
+                type: string
+                default: dot-sim-gdext
+            lib:
+                description: >-
+                    The library's base name (Cargo's lib name): lib<lib>.so, <lib>.dll,
+                    lib<lib>.dylib.
+                type: string
+                default: dot_sim
+            addon:
+                description: The addon directory the library installs into (addons/<addon>/).
+                type: string
+                default: dot_sim
+            install:
+                description: >-
+                    The repository's installer, called as `<install> <library> <platform>
+                    <arch>`; it writes addons/<addon>/bin/ and the .gdextension.
+                type: string
+                default: ci/install.sh
+            parity:
+                description: >-
+                    Build the Linux library, install it, import, and run every suite with
+                    it loaded (the native-against-script parity checks).
+                type: boolean
+                default: true
+            binaries:
+                description: >-
+                    Build every platform's library and keep the zips on the run; on a tag
+                    also attach them to the release.
+                type: boolean
+                default: false
+            suites:
+                description: As validate.yml's input of the same name.
+                type: string
+                default: ''
+            suite-timeout:
+                description: As validate.yml's input of the same name.
+                type: number
+                default: 300
+        secrets:
+            DEPS_TOKEN:
+                description: As validate.yml's secret of the same name; normally empty.
+                required: false
+
+jobs:
+    check:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - name: Check out the project
+              uses: actions/checkout@v4
+              with:
+                  path: project
+
+            - name: Check out the CI scripts this workflow belongs to
+              uses: actions/checkout@v4
+              with:
+                  repository: modcommunity/dot-ci
+                  ref: ${{ github.job_workflow_sha }}
+                  path: dot-ci
+
+            - name: Stable toolchain with clippy
+              run: |
+                  rustup toolchain install stable --profile minimal --component clippy
+                  rustup default stable
+
+            - name: Restore the Cargo cache
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      project/${{ inputs.workspace }}/target
+                  key: cargo-check-${{ hashFiles(format('project/{0}/Cargo.lock', inputs.workspace)) }}
+
+            - name: Clippy (warnings are errors)
+              working-directory: project/${{ inputs.workspace }}
+              run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+            - name: Tests
+              working-directory: project/${{ inputs.workspace }}
+              run: cargo test --workspace --locked
+
+            - name: Build the Linux library
+              if: inputs.parity
+              working-directory: project/${{ inputs.workspace }}
+              env:
+                  PACKAGE: ${{ inputs.package }}
+              run: cargo build --release --locked -p "$PACKAGE"
+
+            - name: Install it into the addon
+              if: inputs.parity
+              working-directory: project
+              env:
+                  INSTALL: ${{ inputs.install }}
+                  LIB: ${{ inputs.workspace }}/target/release/lib${{ inputs.lib }}.so
+              run: bash "$INSTALL" "$LIB" linux x86_64
+
+            # The same runtime steps as validate.yml; check.sh imports first, which is what
+            # lists the extension in .godot/extension_list.cfg so the engine loads it.
+            - name: Install the runtime's shared libraries
+              if: inputs.parity
+              run: |
+                  sudo apt-get update -qq
+                  sudo apt-get install -y -qq --no-install-recommends libfontconfig1 libx11-6 libxcursor1 libxinerama1 libxrandr2 libxi6
+
+            - name: Read the pinned runtime version
+              if: inputs.parity
+              id: pin
+              run: echo "version=$(dot-ci/scripts/fetch-godot.sh --version)" >> "$GITHUB_OUTPUT"
+
+            - name: Restore the runtime
+              if: inputs.parity
+              uses: actions/cache@v4
+              with:
+                  path: ~/.godot-ci
+                  key: godot-${{ steps.pin.outputs.version }}
+
+            - name: Fetch and verify the runtime
+              if: inputs.parity
+              run: |
+                  GODOT="$(dot-ci/scripts/fetch-godot.sh --dest ~/.godot-ci/${{ steps.pin.outputs.version }})"
+                  echo "GODOT=$GODOT" >> "$GITHUB_ENV"
+
+            - name: Resolve the addons this project declares
+              if: inputs.parity
+              env:
+                  DEPS_TOKEN: ${{ secrets.DEPS_TOKEN }}
+              run: dot-ci/scripts/resolve-deps.sh project
+
+            - name: Import, parse, and run every suite with the library loaded
+              if: inputs.parity
+              env:
+                  SUITES: ${{ inputs.suites }}
+                  SUITE_TIMEOUT: ${{ inputs.suite-timeout }}
+              run: dot-ci/scripts/check.sh project
+
+    # One leg per platform and architecture. Each zip unpacks at a project root:
+    # addons/<addon>/bin/<library> and addons/<addon>/<addon>.gdextension, as install.sh
+    # writes them, so a server's install is "unzip at the root, import once".
+    build:
+        if: inputs.binaries
+        needs: check
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - { platform: linux, arch: x86_64, target: x86_64-unknown-linux-gnu, os: ubuntu-24.04, file: 'lib{0}.so' }
+                    - { platform: linux, arch: arm64, target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm, file: 'lib{0}.so' }
+                    - { platform: windows, arch: x86_64, target: x86_64-pc-windows-msvc, os: windows-latest, file: '{0}.dll' }
+                    - { platform: windows, arch: arm64, target: aarch64-pc-windows-msvc, os: windows-latest, file: '{0}.dll' }
+                    - { platform: macos, arch: x86_64, target: x86_64-apple-darwin, os: macos-latest, file: 'lib{0}.dylib' }
+                    - { platform: macos, arch: arm64, target: aarch64-apple-darwin, os: macos-latest, file: 'lib{0}.dylib' }
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 30
+        defaults:
+            run:
+                shell: bash
+        steps:
+            - name: Check out the project
+              uses: actions/checkout@v4
+              with:
+                  path: project
+
+            - name: Stable toolchain for ${{ matrix.target }}
+              env:
+                  TARGET: ${{ matrix.target }}
+              run: |
+                  rustup toolchain install stable --profile minimal --target "$TARGET"
+                  rustup default stable
+
+            - name: Restore the Cargo cache
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      project/${{ inputs.workspace }}/target
+                  key: cargo-${{ matrix.target }}-${{ hashFiles(format('project/{0}/Cargo.lock', inputs.workspace)) }}
+
+            - name: Build
+              working-directory: project/${{ inputs.workspace }}
+              env:
+                  PACKAGE: ${{ inputs.package }}
+                  TARGET: ${{ matrix.target }}
+              run: cargo build --release --locked -p "$PACKAGE" --target "$TARGET"
+
+            - name: Version
+              id: v
+              run: |
+                  if [ "${GITHUB_REF_TYPE}" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="${GITHUB_SHA::12}"; fi
+                  echo "version=$v" >> "$GITHUB_OUTPUT"
+
+            - name: Install and zip
+              working-directory: project
+              env:
+                  INSTALL: ${{ inputs.install }}
+                  ADDON: ${{ inputs.addon }}
+                  NAME: ${{ github.event.repository.name }}
+                  VERSION: ${{ steps.v.outputs.version }}
+                  PLATFORM: ${{ matrix.platform }}
+                  ARCH: ${{ matrix.arch }}
+                  LIB: ${{ inputs.workspace }}/target/${{ matrix.target }}/release/${{ format(matrix.file, inputs.lib) }}
+              run: |
+                  set -euo pipefail
+                  bash "$INSTALL" "$LIB" "$PLATFORM" "$ARCH"
+                  mkdir -p "$RUNNER_TEMP/dist"
+                  zip="$RUNNER_TEMP/dist/$NAME-$VERSION-$PLATFORM-$ARCH.zip"
+                  if [ "$PLATFORM" = windows ]; then
+                      7z a -tzip "$zip" "addons/$ADDON/bin" "addons/$ADDON/$ADDON.gdextension" >/dev/null
+                  else
+                      zip -qr "$zip" "addons/$ADDON/bin" "addons/$ADDON/$ADDON.gdextension"
+                  fi
+
+            - name: Keep it on the run
+              uses: actions/upload-artifact@v4
+              with:
+                  name: native-${{ matrix.platform }}-${{ matrix.arch }}
+                  path: ${{ runner.temp }}/dist
+                  if-no-files-found: error
+
+    # On a tag only. A draft until every zip is on it, for the reason release.yml gives:
+    # the site's sync reads a release whenever its tick lands and must not see half of one.
+    publish:
+        if: inputs.binaries && github.ref_type == 'tag'
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+            - name: Collect the zips
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: native-*
+                  path: dist
+                  merge-multiple: true
+
+            - name: Checksums
+              working-directory: dist
+              run: sha256sum *.zip > SHA256SUMS-native
+
+            - name: Attach them to the release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
+                  TAG: ${{ github.ref_name }}
+              run: |
+                  set -euo pipefail
+                  created=0
+                  if ! gh release view "$TAG" >/dev/null 2>&1; then
+                      gh release create "$TAG" --title "$TAG" --generate-notes --draft --verify-tag
+                      created=1
+                  fi
+                  for f in dist/*; do gh release upload "$TAG" "$f" --clobber; done
+                  if [ "$created" = 1 ] || [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" = "true" ]; then
+                      gh release edit "$TAG" --draft=false
+                  fi
