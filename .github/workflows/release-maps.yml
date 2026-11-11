@@ -1,6 +1,6 @@
 # Tag a MAP repository and every map in it lands on the release as a pack zip of its own.
 #
-# A map repository (g2gfast-maps) holds source maps and no Godot project: the game that
+# A map repository (airdrift-maps) holds source maps and no Godot project: the game that
 # plays them is what imports them, and a pack needs the imported outputs. So this checks
 # the game out beside the maps, links the maps in where the game looks for them, imports
 # the game, and packs each map directory with scripts/package-subpacks.sh. website-city's

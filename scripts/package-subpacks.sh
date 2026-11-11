@@ -9,7 +9,7 @@
 # Maps. A game that delivers its maps publishes each one as its own pack -- a server
 # fetches the map it changes to and a player downloads the one being played, so a server
 # offering thirty courses does not make anybody download thirty. The maps live in their
-# own repository (g2gfast-maps), but only a Godot project that has IMPORTED them can
+# own repository (airdrift-maps), but only a Godot project that has IMPORTED them can
 # produce what a pack needs: the imported outputs (`.ctex` and friends) that its `.import`
 # markers name. So this runs inside the game's project, with the map repository linked in
 # at <root>, after `godot --headless --import`, exactly as package.sh --pack runs after an

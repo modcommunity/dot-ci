@@ -12,7 +12,7 @@
 # one it cannot satisfy -- correctly, and too late: by then the pack is published, the
 # site offers it, and a server that restarts onto it boots into "This game needs
 # dot-platform API level 3 or newer; this server has level 2". That happened on
-# 2026-10-04 with game-g2gfast v0.1.5, because the addon release it needed existed only
+# 2026-10-04 with game-airdrift v0.1.5, because the addon release it needed existed only
 # as untagged commits when the game was tagged.
 #
 # So the same rule is asked here, of the newest RELEASED server: the addons.lock of

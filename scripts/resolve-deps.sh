@@ -124,16 +124,16 @@ fi
 
 # [b]Content a project links from another repository, when it asks for it here.[/b]
 #
-# A game's maps can live in a repository of their own (game-playground-maps, the mg-*
+# A game's maps can live in a repository of their own (playlot-maps, the mg-*
 # -maps), linked in by bootstrap.sh from a comment directly above the ignored path:
 #
 #     # bootstrap-link: game-playground-maps/maps ci
 #     /maps/custom
 #
 # Without the link a runner checks a game with none of its maps, and every suite that
-# loads one fails -- game-playground's CI was red for two days over twelve documents it
+# loads one fails -- game-playlot's CI was red for two days over twelve documents it
 # could not see. The trailing `ci` is an OPT-IN, and the default is no on purpose:
-# g2gfast-maps is 1.8 GB, and two games link it. A link without `ci` is left to the
+# airdrift-maps is 1.8 GB, and two games link it. A link without `ci` is left to the
 # suite, which is expected to cope with the directory being absent. bootstrap.sh reads
 # only the third field, so the extra word costs it nothing.
 #

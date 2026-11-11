@@ -1,6 +1,6 @@
 # CI and test speedups
 
-Measured on dev02, 2026-10-22, game-arena (`./game.sh --no-parse test <suite>`, one at a time under `heavy`). Numbers are in the table below.
+Measured on dev02, 2026-10-22, game-fatal-contact (`./game.sh --no-parse test <suite>`, one at a time under `heavy`). Numbers are in the table below.
 
 ## Done in this repository
 
