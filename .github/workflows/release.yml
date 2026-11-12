@@ -51,6 +51,14 @@ on:
                     game's content/<id>/pack.json gives dot-server-deploy.
                 type: string
                 default: ''
+            pack-owned-addons:
+                description: >-
+                    With `pack`, keep this repository's own addons/<name>/ (the tracked
+                    ones with a plugin.cfg) in the pack, for an add-on whose pack a host
+                    mounts as an overlay: its code and its data in one signed pack.
+                    Linked addons stay out either way.
+                type: boolean
+                default: false
             server-compat:
                 description: >-
                     With `pack`, refuse to release a pack whose requires.json asks for more
@@ -150,11 +158,13 @@ jobs:
               env:
                   PACK: ${{ inputs.pack }}
                   PACK_EXCLUDE_DIRS: ${{ inputs.pack-exclude-dirs }}
+                  PACK_OWNED: ${{ inputs.pack-owned-addons }}
               run: |
                   args=()
                   if [ "$PACK" = "true" ]; then
                       args+=(--pack)
                       for d in $PACK_EXCLUDE_DIRS; do args+=(--exclude-dir "$d"); done
+                      [ "$PACK_OWNED" = "true" ] && args+=(--pack-owned-addons)
                   fi
                   dot-ci/scripts/package.sh project "${{ steps.v.outputs.version }}" \
                       --out "$RUNNER_TEMP/dist" \

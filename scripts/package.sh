@@ -48,13 +48,14 @@
 #
 set -uo pipefail
 
-USAGE="usage: package.sh <project-dir> <version> [--out DIR] [--name NAME] [--pack [--exclude-dir DIR]...]"
+USAGE="usage: package.sh <project-dir> <version> [--out DIR] [--name NAME] [--pack [--exclude-dir DIR]... [--pack-owned-addons]]"
 PROJECT="${1:?$USAGE}"
 VERSION="${2:?$USAGE}"
 shift 2
 OUT=""
 NAME=""
 PACK=0
+PACK_OWNED=0
 # What a game pack never carries, at any depth. addons/ above all: every dot-* addon
 # is already in the host build, and packing a game with its addons produced an 11 MiB
 # pack of which the game was a fraction. images/ is a README's pictures: every game's
@@ -72,6 +73,7 @@ while [ $# -gt 0 ]; do
         --out)  OUT="${2:?--out needs a directory}"; shift 2 ;;
         --name) NAME="${2:?--name needs a name}"; shift 2 ;;
         --pack) PACK=1; shift ;;
+        --pack-owned-addons) PACK_OWNED=1; shift ;;
         --exclude-dir) EXCLUDE_DIRS+=("${2:?--exclude-dir needs a name}"); shift 2 ;;
         *) printf 'unknown option: %s\n' "$1" >&2; exit 2 ;;
     esac
@@ -166,7 +168,11 @@ fi
 
 # An addon repository takes --pack too: its zip is the install, the pack is the data it
 # publishes to the Workshop (provides.json, weapons/, cfg/). addons/ is left out of the pack
-# either way: the host owns the dot-* addons and the Workshop pack is data only.
+# by default: the host owns the dot-* addons and the Workshop pack is data only.
+# --pack-owned-addons puts this repository's OWN addons (the tracked addons/<name>/plugin.cfg
+# folders above) back in, version-stamped, for a pack that carries its code as well as its
+# data: one a host mounts as an add-on overlay instead of building it in. Linked addons stay
+# out; the other exclusions still apply inside the owned folders.
 if [ "$PACK" -eq 1 ]; then
     [ -d "$PROJECT/.godot/imported" ] || {
         printf '%s has not been imported: --pack needs `godot --headless --import` first\n' "$NAME" >&2
@@ -180,6 +186,19 @@ if [ "$PACK" -eq 1 ]; then
     for d in "${EXCLUDE_DIRS[@]}"; do
         find "$PACK_DIR" -depth -type d -name "$d" -exec rm -rf {} + || exit 1
     done
+    if [ "$PACK_OWNED" -eq 1 ]; then
+        [ "${#OWNED[@]}" -gt 0 ] || { printf '%s owns no addons/<name>/plugin.cfg for --pack-owned-addons\n' "$NAME" >&2; exit 2; }
+        mkdir -p "$PACK_DIR/addons" || exit 1
+        for addon in "${OWNED[@]}"; do
+            # From the stage, where plugin.cfg already carries this release's version.
+            cp -a "$STAGE/addons/$addon" "$PACK_DIR/addons/$addon" || exit 1
+            for d in "${EXCLUDE_DIRS[@]}"; do
+                [ "$d" = addons ] && continue
+                find "$PACK_DIR/addons/$addon" -mindepth 1 -depth -type d -name "$d" -exec rm -rf {} + || exit 1
+            done
+            printf 'pack keeps owned addons/%s\n' "$addon" >&2
+        done
+    fi
     # A script's .uid sidecar is editor bookkeeping; DotCloudPublisher leaves it out
     # too, and the two publishers should produce the same pack from the same tree.
     find "$PACK_DIR" -name '*.gd.uid' -type f -delete || exit 1
