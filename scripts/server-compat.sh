@@ -150,6 +150,8 @@ for line in lock_text.splitlines():
 
 
 def repo_of(addon):
+    if addon == "arena_weapons":  # the directory kept its name when arena-weapons became fc-weapons
+        return "fc-weapons"
     if addon in ("zee_weapons", "zed_weapons"):
         return addon.replace("_weapons", "-dot-weapons")
     return addon.replace("_", "-")
