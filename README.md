@@ -1,21 +1,19 @@
 # dot-ci
 
-The checks and the release packaging every project in this family shares, as three reusable GitHub Actions workflows (validate, release, release-maps) and six shell scripts.
-
-A repository here gets a `.github/workflows/` of about twenty lines and no knowledge of how any of it works. Everything that is actually hard — that the addons have to be fetched before a single script will parse, which runtime and which digest, which scenes are suites, which engine output is noise and which is a failure, what an addon's distributable actually is — lives here once. Fixing one of those is a commit, not sixty commits.
+The checks and release packaging that every project in the [dot-*](https://github.com/modcommunity) family shares. It is three reusable GitHub Actions workflows (`validate`, `release` and `release-maps`) and a set of shell and Python scripts. A repository adds about twenty lines of workflow and needs to know nothing else. Fixing a check is one commit here, not one per repository.
 
 ## First 10 minutes
 
-1. Add the short `.github/workflows/ci.yml` below to your repository; it needs nothing else.
-2. Reproduce what it runs locally with [Running the scripts yourself](#running-the-scripts-yourself): import, parse every script, run the suites.
+1. Add the `ci.yml` below to your repository.
+2. Reproduce it locally with [Running the scripts yourself](#running-the-scripts-yourself): import, parse every script, run the suites.
 3. Push. A failing check names the script and the line.
-4. To release, push a tag such as `v1.2.3`; `release.yml` packages it ([What a release builds](#what-a-release-builds)).
+4. To release, push a tag such as `v1.2.3`. `release.yml` packages it (see [Releases](#releases)).
 
-**`@v1` is a floating tag**: it always points at the newest `v1.x.y` (now `v1.3.6`), so a project on `@v1` gets fixes with no edit. Pin `@v1.3.5` for a build that cannot change under you; inputs added later (`pack:`, `bootstrap-link`) name the first version that has them. In a game, the local `./game.sh test` runs the same steps CI does.
+`@v1` is a floating tag. It always points at the newest `v1.x.y`, so a project on `@v1` gets fixes with no edit. Pin a full tag such as `@v1.3.5` for a build that cannot change under you. In a game, `./game.sh test` runs the same steps CI does.
 
 ## Calling it
 
-`.github/workflows/ci.yml`, in full:
+`.github/workflows/ci.yml`:
 
 ```yaml
 name: CI
@@ -32,7 +30,7 @@ jobs:
             DEPS_TOKEN: ${{ secrets.DOT_DEPS_TOKEN }}
 ```
 
-`.github/workflows/release.yml`, in full:
+`.github/workflows/release.yml`:
 
 ```yaml
 name: Release
@@ -52,119 +50,103 @@ jobs:
             contents: write
 ```
 
-Release runs `validate` first and depends on it, rather than `release.yml` calling `validate.yml` itself. A reusable workflow cannot take an expression for a ref, so nesting them would mean pinning the inner one to a branch — and then the scripts a release runs would not be the ones its workflow was written against. Four lines in the caller buys that guarantee back.
+The release runs `validate` as its own job instead of calling it from inside `release.yml`. A reusable workflow cannot take an expression for a ref, so nesting would pin the inner one to a branch, and a release would run scripts that do not match its workflow.
 
-## What each repository has to be given
+## Credentials
 
-**Nothing, as things stand.** Every repository in the family is public, and a public clone needs no credential, so the checks run green with no secret configured anywhere.
+Nothing is needed today. Every repository in the family is public, so a clone needs no credential and the checks pass with no secret set.
 
-The callers still pass `DOT_DEPS_TOKEN` and it is still worth leaving in place. It is normally empty and `resolve-deps.sh` treats it as optional; the day one of these repositories goes private, creating the secret is the whole change, in one place, rather than a commit against sixty workflow files at the moment CI turns red.
+The callers still pass `DOT_DEPS_TOKEN`. It is normally empty and `resolve-deps.sh` treats it as optional. If a repository goes private, creating the secret is the whole change. It must be a personal or app token, not the built-in `GITHUB_TOKEN`, which only reaches the repository the workflow runs in. Release needs no cloud credential, signing key or registry login.
 
-If you do create it: an organisation secret on the addons' side, and the same token as a repository secret on the games' side, because the two owners are different accounts and an organisation secret does not cross that line. It cannot be the built-in `GITHUB_TOKEN` — that is scoped to the one repository the workflow runs in, and every project here except `dot-core` needs between one and forty-three *others* checked out before its first script will parse.
+## Inputs of `validate.yml`
 
-**No cloud credentials, no signing key, no registry login.** See *What a release does not do*, below.
-
-## The inputs
-
-| Input | Default | |
+| Input | Default | What it does |
 | --- | --- | --- |
-| `suites` | auto-detect | Scenes to run, space separated, relative, without `.tscn`. Set it when a repository's suite is not named the way auto-detection expects. |
-| `suite-timeout` | `300` | Seconds any one suite may take. Past it, the suite has failed. A long suite (a many-round bot run takes 15-25 minutes on a slower box) wants `1800`; locally, `SUITE_TIMEOUT=1800 scripts/check.sh`. |
-| `godot` | `true` | `false` for a repository that is not a Godot project. Those skip the runtime entirely. |
-| `shell-command` | — | A command to run in the checkout, instead of or as well as the Godot check. |
+| `suites` | auto-detect | Scenes to run, space separated, relative, without `.tscn`. |
+| `suite-timeout` | `300` | Seconds any one suite may run. Past it, the suite has failed. Set `1800` for a long suite, or locally `SUITE_TIMEOUT=1800 scripts/check.sh`. `0` means no limit. |
+| `godot` | `true` | `false` for a repository that is not a Godot project. It skips the runtime. |
+| `shell-command` | none | A command to run in the checkout, instead of or as well as the Godot check. |
+| `efficiency` | `false` | Run the size, per-frame hazard and duplication gates against baselines under `ci/efficiency/`. |
+| `hygiene` | `false` | Run the hygiene gates below. They report only unless `hygiene-blocking` is `true`. |
+| `profiles` | `false` | Check every `cfg/` profile against its schema. |
+| `perf` | `false` | Run the perf smoke against `ci/perf/smoke.json`. |
 
-`release.yml` takes `version` (empty means "take it from the tag", which is the only value that cannot disagree with what was pushed) and `prerelease`. A game also passes `pack: true` (plus `pack-exclude-dirs` for anything beyond `addons examples tools screenshots images .github`, and the `DEPS_TOKEN` secret), which imports the project and attaches `<name>-<version>-pack.zip` as well — see below. Needs `@v1.1.0` or later.
+`release.yml` takes `version` (empty means take it from the tag, the only value that cannot disagree with what was pushed) and `prerelease`. A game also passes `pack: true` (and `pack-exclude-dirs` for folders beyond `addons examples tools screenshots images .github`).
 
 ## What it checks
 
-**Every script parses.** `--import` first, because that pass is what registers the `class_name` globals; without it every cross-file type reference fails at once and one missing pass reads as dozens of unrelated errors. Then `--check-only` per script, on the files *git tracks* — which is exactly this repository's own source, because the linked dependencies are gitignored in every project here. When the project's dot-core carries `addons/dot_core/tools/dot_parse_all.gd`, all of them are compiled in one process instead (about ten times faster: 66 scripts took 40 s per file and 4 s together, with the same verdicts, and any output for a script is still a failure); a project without it, or `PARSE_PER_FILE=1`, gets the process-per-script loop.
+| Check | What it does |
+| --- | --- |
+| Every script parses | Imports first, because that registers the `class_name` globals. Then compiles the files git tracks. With dot-core's `tools/dot_parse_all.gd` this is one process; `PARSE_PER_FILE=1` forces one process per script. Any output for a script is a failure. |
+| Linked maps | A comment `# bootstrap-link: <repo>/<dir> ci` above an ignored path in a game's `.gitignore` makes `resolve-deps.sh` shallow-clone that repository and link the folder. The trailing `ci` opts in, because one maps repository is 1.8 GB. |
+| No JavaScript string evaluation | Fails on `JavaScriptBridge.eval`, `DotWeb.eval*`, `eval(` or `new Function(` in tracked `.gd`, `.js` and `.html`. The web origin's CSP forbids it. A real exception carries a `js-eval: allow <reason>` comment. |
+| No Valve-origin files | Uses dot-cloud's `tools/check_valve_files.py --git`: no `.vpk`, `.vtf`, `.vmt`, `.mdl`, `.vvd`, `.vtx`, `.phy`, `.ani` and no `textures/orig` folder. |
+| Windows-safe names | Fails on `* ? : " < > |` or a backslash in a name, a name ending in a dot or space, a reserved device name (CON, NUL, COM1 and so on) or two paths that differ only by case. |
+| Suites run | Each suite scene runs under a timeout, and its output is read even when it exits 0, because a script error inside a test can leave checks silently unrun. |
 
-**A game's maps repository is linked in when the game asks.** A comment line `# bootstrap-link: <repo>/<dir> ci` directly above an ignored path in the game's `.gitignore` makes `resolve-deps.sh` shallow-clone `<repo>` (the games' owner) and link `<dir>` there — the same line `bootstrap.sh` reads on a workstation, which only looks at the third field. The trailing `ci` is an opt-in and the default is off, because one maps repository is 1.8 GB; a link without it is left to the game's suites, which must cope with the directory being absent. Needs `validate.yml@v1.3.0` or later.
+Auto-detection runs `examples/*.tscn` whose name contains `selftest` or starts with `headless_`. Other scenes may open a window or wait for a peer, which is indistinguishable from a hang on a runner. A repository with no detectable suite is reported and passes, and the summary lists it.
 
-**No JavaScript string evaluation.** `check-no-js-eval.py` fails on `JavaScriptBridge.eval`, `DotWeb.eval*`, `eval(` or `new Function(` in tracked `.gd`, `.js` and `.html` (comments ignored), because the web game origin's CSP has no `unsafe-eval` and the call throws `EvalError`. Put a named function in dot-core's `web/dot_web.js` and call it through `DotWeb`; a real exception carries a `js-eval: allow <reason>` comment. Always on.
+## Releases
 
-**No Valve-origin files in a repository.** The guard is dot-cloud's `tools/check_valve_files.py --git`, the same one `publish_pack` runs before it sends a pack: no `.vpk`, `.vtf`, `.vmt`, `.mdl`, `.vvd`, `.vtx`, `.phy` or `.ani`, no `textures/orig` folder. It is checked out at a pinned commit (`DEPS_TOKEN` if the repository ever goes private). CI has no stock index, which is built from a local Valve install and never leaves it, so the content-hash rule is skipped and the log says so; the name and extension rules always run. Always on. A developer gets the same check at commit time from `dot-bootstrap`'s `tools/install-valve-hooks.sh`.
+| Repository | What a release ships |
+| --- | --- |
+| Addon | A zip of `addons/<name>/` only, so it installs by unpacking at a project root. `plugin.cfg`'s version is stamped from the tag in the artifact, never committed. |
+| Game or other | The tracked tree as a tarball, built with `git archive` so gitignored addon links are not shipped. |
+| Game with `pack: true` | Also `<name>-<version>-pack.zip`: the tracked tree without `addons/`, plus the imported outputs its `.import` markers name (moved to `_imported/`), and a `requires.json` of the addon API levels it needs, so an older client refuses it before mounting. |
+| Maps repository | `release-maps.yml` makes one pack per map: it checks the game out beside the maps, imports, and runs `scripts/package-subpacks.sh`. Inputs are `game`, and optionally `maps-dir`, `link-at` and `game-ref`. |
 
-**Tracked names must check out on Windows.** `check-windows-names.py` reads `git ls-files` and fails on any of `* ? : " < > |` or a backslash, a component ending in a dot or space, a reserved device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9, with or without extension), or two paths differing only by case. A Windows pull of such a tree fails with "invalid path". Always on; per-map globs are spelled `surf_%.yml`.
-
-**Then every suite runs**, because a clean parse says the files are valid GDScript and nothing whatsoever about whether the thing works.
-
-**Capped with a timeout, which is not tidiness.** A scene whose script fails to parse *hangs* rather than failing: the identifier does not resolve, the scene never loads, and nothing ever reaches `get_tree().quit()`. Uncapped, that is a runner sitting at the six-hour job limit with no output, reported as an infrastructure problem.
-
-**And a suite that exits 0 is still read.** A script error inside a test aborts *that test*, not the run — the section had already announced itself, so the suite's own section counter is satisfied, it reports `0 failed`, and it quits cleanly with its checks missing. One project here shipped precisely that: nine sections, sixty-three passed, zero failed, exit 0, eight checks that never ran. The engine had printed the error the whole time, so the check is to look.
-
-Auto-detection takes `examples/*.tscn` whose name contains `selftest` or begins with `headless_` — the two names this family gives a scene that runs to a conclusion and quits. It deliberately does not run everything in `examples/`: several of those open a window, wait for input, or want a peer on the other end of a socket, and a demo waiting forever is indistinguishable on a runner from the parse hang above.
-
-A repository with no detectable suite is **reported and passes**. The parse pass still ran, the summary says which repositories are getting half a check, and that list can then shrink on purpose. Failing them instead would only teach people to delete the workflow.
-
-## What a release builds
-
-**An addon repository ships `addons/<name>/` and nothing else.** That folder is the distributable; `project.godot` and `examples/` exist so the addon can be opened and validated standalone, and shipping them would put a second `project.godot` into the tree of whoever unzipped it. The zip's entries begin at `addons/`, so it installs by being unpacked at a project root. `plugin.cfg`'s version is stamped from the tag **in the artifact only** — the tag is the number that is unique, pushed, and impossible to forget to bump, and a committed version that has to be edited in lockstep across fifty-six repositories is a number that goes wrong quietly and then ships.
-
-**Everything else ships the tracked tree as a tarball** — a game is not installed into a project, it is a source that the deployment turns into signed content.
-
-**A game (or an addon repository that is also a Workshop data pack, with `provides.json` at its root) with `pack: true` also ships `<name>-<version>-pack.zip`**, because the tarball cannot become a pack: its addons are gitignored links and it has no `.godot/imported`, and a mounted pack is never re-imported, so every model and texture in it would load as nothing. The pack zip is the tracked tree without `addons/`, `examples/`, `tools/`, `screenshots/`, `images/` (a README's pictures) and anything in `pack-exclude-dirs` (with `pack-owned-addons: true`, the repository's own tracked `addons/<name>/` folders with a `plugin.cfg` go back in, version-stamped, for an add-on a host mounts as an overlay pack), plus exactly the imported outputs its `.import` markers name — moved to `_imported/` with the markers rewritten, because a web export cannot read the engine's reserved `.godot/` directory back out of a mount. It also carries **`requires.json`** at its root — the dot-* addon API levels the game was built against, derived from the game's own files by dot-core's `tools/dot_requires.gd` — so a client or server whose addons are older refuses the pack **before mounting it** with "This game needs dot-net API level 3 or newer; this client has level 2" instead of a parse error mid-load. A game that commits its own `requires.json` has it audited instead, and the release fails if it leaves out an addon the game uses. It is unsigned. website-city's release sync publishes a release file ending in `-pack.zip` in place of everything else on that release and signs it there, under `<owner>/<repo>`.
-
-**A map repository releases one pack per map** with `release-maps.yml` (`uses: modcommunity/dot-ci/.github/workflows/release-maps.yml@v1.2.5`, inputs `game: owner/game-repo` and optionally `maps-dir`, `link-at`, `game-ref`). A map repository holds source maps and no Godot project, and a pack needs the imported outputs, so the workflow checks the game out beside the maps, links them in where the game looks for them (`maps/imported` by default), imports, and runs `scripts/package-subpacks.sh`: each `<link-at>/<id>/` becomes `<id>-<version>-pack.zip`, with its import markers' outputs under `_imported/` and its references to its own directory re-rooted to the pack (the site rewrites only references to paths a pack holds, relative to its root). website-city's release sync publishes each archive as its own pack, `<owner>/<id>@<version>`. Run it locally with `scripts/package-subpacks.sh <imported-project> <version> --root maps/imported --out <dir> [id ...]`.
-
-**And a pack no released server can run is not released.** Before the release is created, `scripts/server-compat.sh` reads the newest `v*` tag of `modcommunity/dot-server-deploy`, its `addons.lock`, and each locked addon's `LEVEL`/`OLDEST` at that ref, and applies the same rule a server applies at boot. A game that needs an addon API no server release has yet fails here — "needs dot_platform API level 3; the server at v0.1.7 locks dot-platform v0.1.3, which has level 2" — instead of being published and refused by every server that restarts onto it, which is what happened on 2026-10-04. The fix is upstream: tag the addon, bump the lock, release dot-server-deploy, re-tag the game. **The newest release is the newest one players can use**: a game pack carries no addons and runs on the ones compiled into the client build its server pins, so a dot-server-deploy tag whose `web/shell-build.inputs` records a different `addons.lock` hash than the tag's own lock (its client build was exported from an older lock) is skipped with a note, and the check runs against the newest tag whose build matches. A tag with no record predates it and counts. `server-compat: false` opts out, for a game aimed at a deployment of its own. Run it locally with `scripts/server-compat.sh <pack.zip|requires.json> [--server-ref vX.Y.Z]`.
-
-Both come with a `SHA256SUMS`, because a release page is not the only thing that consumes these and whatever carries them onward has to be able to say the bytes it got are the bytes that were built.
-
-The artifact is built with `git archive`, and that choice is load-bearing. `addons/` is a directory of gitignored symlinks into sibling checkouts; a `cp -r` would either follow them — shipping a second, stale copy of every dependency at the same `res://` paths the host already defines — or preserve them, shipping links that dangle the moment the tree moves. An ignored file is not tracked, so it is not in the archive, and the list maintains itself.
-
-## What a release does not do
-
-**It does not publish to the content origin, and it does not sign anything.** Signing is what makes delivered content safe: a mounted resource pack can contain scripts and can never be unmounted on any platform, so a signature is the only thing between a content origin and arbitrary code in every client. The private half of that key exists in one place on purpose. Sixty repositories each holding a copy would be sixty ways to lose it, and a release workflow is the most-read, least-guarded place in any repository.
-
-So a release here ends at an artifact and a digest. What carries it to the CDN is one deployment, which already holds the key and already knows what a pack is.
+Every release carries a `SHA256SUMS`. Before a release is created, `scripts/server-compat.sh` checks that the newest `dot-server-deploy` release can run the pack. A game that needs an addon API level no server release has yet fails here. `server-compat: false` opts out. A release does not publish to the content origin and does not sign anything. The signing key lives in one deployment on purpose.
 
 ## The runtime
 
-Pinned in `godot.pin`: one version, and the SHA512 that makes the pin mean something. A mismatch is fatal, the file is deleted, and there is no `--force` and no "checksum unavailable, continuing" — a script that fetches a binary without verifying it is a supply chain with nobody in it, and this one runs unattended on every push.
+`godot.pin` pins one Godot version and its SHA512. A mismatch is fatal. The digests are committed here by a person reading the release's own `SHA512-SUMS.txt`, never read from beside the binary. The pin is a copy of the one in dot-server-deploy, which is authoritative and guards against drift. Move both in the same change.
 
-The digests are in this repository, in git, put there by a person reading the release's own `SHA512-SUMS.txt`. They are never read from beside the binary: a checksum served by whoever served the zip is checked by whoever would have had to tamper with both, which is one thing.
+## Hygiene gates
 
-That pin is the *second* copy. `godot.pin` says which one is authoritative and what guards the drift between them.
+Opt in with `hygiene: true`. Each gate has a shrink-only baseline under `ci/efficiency/`, made with `--init` and lowered with `--update`. Existing debt never fails; only new violations do.
 
-## Why this repository is public
-
-A reusable workflow in a private repository can only be called by repositories owned by the same account. This family has two owners, and that is a rule rather than an accident — so a private `dot-ci` could be called by half of it and not by the other half, which is the half whose releases reach players.
-
-Nothing here is secret. It is YAML and shell; every credential it touches arrives as a secret from the caller, and the repositories it clones stay private.
-
-## Hygiene gates and the nightly scan
-
-Opt-in with `hygiene: true` on `validate.yml`; they report and never fail the build unless `hygiene-blocking: true`. Each has a shrink-only baseline under `ci/efficiency/` made with `--init` and lowered with `--update`, exactly like the efficiency gates, so existing debt never fails and only new violations do.
-
-- `scripts/check-comments.py`: comment blocks over 3 lines, section banners, commented-out code, and history (a date, "found by", "used to"). Baseline `comments.tsv`.
-- `scripts/comment-report.py [--tsv] [dirs]`: report only, never fails. Per repository (default every `~/godot/*/`): lines, comment-only share, `##` doc share, comment KB and the four `check-comments.py` kinds with the baseline ignored, grouped addon / game with a family total. Target: comment share under 12% of lines.
-- `scripts/check-logging.py`: a `const CHANNEL` in a file that never calls `DotLog.`, `push_warning` calls, and runtime `print`/`print_rich` (examples, tools, qa, editor and SceneTree scripts exempt; `# check-logging: allow print`). Baseline `logging.tsv`.
-- `scripts/check-markdown-wrap.py`: a paragraph hard-wrapped over several lines in a `.md` (fences, front matter, lists, tables, quotes and indented code are skipped). Baseline `markdown-wrap.tsv`.
-- `scripts/check-suite-checks.py`: a suite's `const CHECKS` (plus the offset in `_report(CHECKS + k)`) that differs from the total in `.godot/test-logs/<suite>.log`; a suite with no log is skipped, because the count is not knowable statically. `CHECKS` may be integer arithmetic over other consts in the file (`776 + 21`, `7 + 3 * WINDOW_CHECKS`), read with `ast` and never `eval`; offsets in `_report(...)`, `_report_sections(..., E)` and `== CHECKS + k` count, and a name it cannot resolve means the suite is skipped with a note on stderr, not a violation. A log older than its script is skipped with "log older than script, rerun". Baseline `suite-checks.tsv`.
-- `scripts/check-generated.py`: a repository lists `generated-file<TAB>command` in `ci/generated.tsv`; the gate runs each command, diffs the file against the committed copy, and restores it. Baseline `generated.tsv`.
-- `scripts/check-web-size.py`: `ci/web-budget.tsv` lists `file-or-glob<TAB>max_bytes` for the web build; an absent file is skipped. Baseline `web-size.tsv`.
-- `scripts/duplication-cross.sh [--top N] [dirs]`: the nightly runner's wrapper around `check-duplication.py --cross` over every `~/godot/*/` repository (or the given ones); prints the top clusters and always exits 0.
+| Script | What it finds |
+| --- | --- |
+| `check-comments.py` | Comment blocks over 3 lines, banners, commented-out code and history (dates, "found by"). |
+| `check-logging.py` | A `const CHANNEL` in a file that never logs, `push_warning` calls, and runtime `print` (examples, tools and editor scripts are exempt). |
+| `check-markdown-wrap.py` | Paragraphs hard-wrapped over several lines in a `.md`. |
+| `check-suite-checks.py` | A suite whose `const CHECKS` differs from the total in its last log. |
+| `check-generated.py` | A generated file that differs from what its command in `ci/generated.tsv` produces. |
+| `check-web-size.py` | A web build file over its budget in `ci/web-budget.tsv`. |
+| `comment-report.py`, `duplication-cross.sh` | Reports only; always exit 0. |
 
 ## Profile check
 
-Opt-in with `profiles: true` on `validate.yml`, after the import. `scripts/check-profiles.sh <project>` runs dot-profile's `tools/profile_check.gd` over `cfg/addons/*`, `cfg/game/*` and `cfg/server/*`: unknown keys, wrong types, out-of-range values, NaN and infinity, a missing or cyclic `extends`, duplicate ids, `.yaml` files that are never read and folder profiles with no schema for a child folder. It fails the build with one `path: message` line per problem; a project without `cfg/` or without the tool passes. A project's own kinds are passed with `--schema <script>`.
+With `profiles: true`, `scripts/check-profiles.sh <project>` runs dot-profile's `tools/profile_check.gd` over `cfg/addons/*`, `cfg/game/*` and `cfg/server/*`. It reports unknown keys, wrong types, out-of-range values, NaN and infinity, a missing or cyclic `extends`, duplicate ids and unread `.yaml` files, one `path: message` line each. A project without `cfg/` passes. Pass a project's own kinds with `--schema <script>`.
 
 ## Running the scripts yourself
 
-They take a directory and work the same on a laptop as on a runner:
+They take a directory and work the same on a laptop as on a runner.
 
 ```bash
-scripts/fetch-godot.sh --version         # the pinned version
+scripts/fetch-godot.sh --version               # the pinned version
 scripts/resolve-deps.sh ../dot-cloud --print   # what that project declares
 GODOT=godot scripts/check.sh ../dot-cloud      # import, parse, run the suites
 scripts/package.sh ../dot-cloud 0.2.0 --out /tmp/out
 ```
 
-`resolve-deps.sh` is the only one that wants a token, and only when it is actually cloning. On a developer box the addons are already linked and `check.sh` is all you need — which is the same thing each project's own `tools/check.sh` does, kept there because that is where somebody runs it by hand.
+`resolve-deps.sh` wants a token only when it actually clones.
 
-`scripts/efficiency-trend.py` reads `efficiency-report.sh` output on stdin, appends the totals to a history file and prints the change since the last run; `--strict` exits 1 when size, hazards or duplicate clusters grew.
+| Script | What it does |
+| --- | --- |
+| `efficiency-trend.py` | Reads `efficiency-report.sh` output on stdin, appends the totals to a history file and prints the change. `--strict` exits 1 if size, hazards or duplicate clusters grew. |
+| `efficiency-nightly.sh` | The nightly check in one command: report, then the trend with `--strict`. |
+| `rollout-caller.sh <repo>` | Turns the efficiency gates on for one repository: baselines first, then the flags. |
+| `perf-smoke.sh [--init\|--update] [--scene S] [--seconds N] <project>` | Loads the main scene headless for N seconds (default 5) and compares load time, frame time, node count and memory with `ci/perf/smoke.json`. Fails when more than 20% over budget (timings get 2.5 times that). `--init` records the budget, `--update` only lowers it. Run it under `heavy`. |
 
-`scripts/efficiency-nightly.sh` is the nightly check in one command (report table, then the trend with `--strict`); the runner pastes its output into the `chk-efficiency` note.
+## Why this repository is public
 
-`scripts/perf-smoke.sh [--init|--update] [--scene S] [--seconds N] <project>` loads the main scene headless, runs it N seconds (default 5) and compares load time, frame time, node count and memory with `ci/perf/smoke.json` in the project. It fails more than 20% over budget (timings get 2.5 times that, because they move between identical runs on a busy machine); `--init` records the budget, `--update` only lowers it. Frame time is the engine's process time with rendering off: a CPU-side ratchet for scripts and node count, not a GPU measure. Run it under `heavy`; it is not yet a `validate.yml` input.
+A reusable workflow in a private repository can only be called by repositories of the same account. The family has two owners, so a private dot-ci would serve only half of it. Nothing here is secret: it is YAML and scripts, and every credential arrives from the caller.
+
+## Status
+
+Built and maintained with Claude Code. The checks run on every repository in the family, but little of this has been in front of outside users yet. Please report rough edges by opening an issue.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE). Only the TMC back-end web infrastructure is not open source.
