@@ -83,6 +83,8 @@ If you do create it: an organisation secret on the addons' side, and the same to
 
 **No JavaScript string evaluation.** `check-no-js-eval.py` fails on `JavaScriptBridge.eval`, `DotWeb.eval*`, `eval(` or `new Function(` in tracked `.gd`, `.js` and `.html` (comments ignored), because the web game origin's CSP has no `unsafe-eval` and the call throws `EvalError`. Put a named function in dot-core's `web/dot_web.js` and call it through `DotWeb`; a real exception carries a `js-eval: allow <reason>` comment. Always on.
 
+**No Valve-origin files in a repository.** The guard is dot-cloud's `tools/check_valve_files.py --git`, the same one `publish_pack` runs before it sends a pack: no `.vpk`, `.vtf`, `.vmt`, `.mdl`, `.vvd`, `.vtx`, `.phy` or `.ani`, no `textures/orig` folder. It is checked out at a pinned commit (`DEPS_TOKEN` if the repository ever goes private). CI has no stock index, which is built from a local Valve install and never leaves it, so the content-hash rule is skipped and the log says so; the name and extension rules always run. Always on. A developer gets the same check at commit time from `dot-bootstrap`'s `tools/install-valve-hooks.sh`.
+
 **Tracked names must check out on Windows.** `check-windows-names.py` reads `git ls-files` and fails on any of `* ? : " < > |` or a backslash, a component ending in a dot or space, a reserved device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9, with or without extension), or two paths differing only by case. A Windows pull of such a tree fails with "invalid path". Always on; per-map globs are spelled `surf_%.yml`.
 
 **Then every suite runs**, because a clean parse says the files are valid GDScript and nothing whatsoever about whether the thing works.

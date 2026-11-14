@@ -174,6 +174,21 @@ jobs:
             - name: No JavaScript string evaluation
               run: python3 dot-ci/scripts/check-no-js-eval.py project
 
+            # The Valve-origin guard is the one publish_pack runs. It is read at a pinned
+            # commit, not a branch, for the same reason job_workflow_sha is used. CI has no
+            # stock index (it is built from a local Valve install and never leaves it), so
+            # the name and extension rules run and the log says the content match was skipped.
+            - name: Check out the Valve-origin guard
+              uses: actions/checkout@v4
+              with:
+                  repository: modcommunity/dot-cloud
+                  ref: 01c6b3fbb1db604d550d05b3aa709d7f52848ccd
+                  token: ${{ secrets.DEPS_TOKEN || github.token }}
+                  path: dot-cloud
+
+            - name: No Valve-origin files in the tracked tree
+              run: python3 -I dot-cloud/tools/check_valve_files.py --git project
+
             # A requires.floor.json lower than a newer addon class the code names unguarded.
             - name: Floors cover the addon levels the code uses
               run: python3 dot-ci/scripts/check-floor-uses.py project
