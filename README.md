@@ -1,5 +1,3 @@
-# dot-ci
-
 The checks and release packaging that every project in the [dot-*](https://github.com/modcommunity) family shares. It is three reusable GitHub Actions workflows (`validate`, `release` and `release-maps`) and a set of shell and Python scripts. A repository adds about twenty lines of workflow and needs to know nothing else. Fixing a check is one commit here, not one per repository.
 
 ## First 10 minutes
