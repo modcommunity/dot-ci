@@ -117,7 +117,7 @@ Opt in with `hygiene: true`. Each gate has a shrink-only baseline under `ci/effi
 
 ## Profile check
 
-With `profiles: true`, `scripts/check-profiles.sh <project>` runs dot-profile's `tools/profile_check.gd` over `cfg/addons/*`, `cfg/game/*` and `cfg/server/*`. It reports unknown keys, wrong types, out-of-range values, NaN and infinity, a missing or cyclic `extends`, duplicate ids and unread `.yaml` files, one `path: message` line each. A project without `cfg/` passes. Pass a project's own kinds with `--schema <script>`.
+With `profiles: true`, `scripts/check-profiles.sh <project>` runs dot-profile's `tools/profile_check.gd` over `cfg/addon/*`, `cfg/game/*` and `cfg/server/*`. It reports unknown keys, wrong types, out-of-range values, NaN and infinity, a missing or cyclic `extends`, duplicate ids and unread `.yaml` files, one `path: message` line each. A project without `cfg/` passes. Pass a project's own kinds with `--schema <script>`.
 
 ## Running the scripts yourself
 
